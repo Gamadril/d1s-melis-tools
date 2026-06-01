@@ -1,0 +1,9 @@
+[package]
+name = "gpt"
+version = "0.1.0"
+edition = "2021"
+description = "GPT partition table extract and splice for Allwinner Melis SPI NOR dumps"
+publish = false
+
+[dependencies]
+binrw = { workspace = true }

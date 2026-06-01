@@ -1,0 +1,34 @@
+[package]
+name = "sd_fel_switcher"
+version = "0.1.0"
+edition = "2021"
+description = "SD card SPL (eGON.BT0) to enter Allwinner F133/D1s USB FEL mode"
+publish = false
+
+[[bin]]
+name = "sd_fel_switcher"
+path = "src/main.rs"
+test = false
+bench = false
+
+# Host-only; build with: cargo build --release --bin egon_pad --target <host>
+[[bin]]
+name = "egon_pad"
+path = "src/bin/egon_pad.rs"
+test = false
+bench = false
+
+[profile.dev]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = false
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = false
+strip = true

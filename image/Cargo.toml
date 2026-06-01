@@ -1,0 +1,9 @@
+[package]
+name = "image"
+version = "0.1.0"
+edition = "2021"
+description = "Allwinner eGON.BT0 and sunxi CHK / TOC image headers"
+publish = false
+
+[dependencies]
+binrw = { workspace = true }

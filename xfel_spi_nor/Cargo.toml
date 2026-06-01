@@ -1,0 +1,24 @@
+[package]
+name = "xfel_spi_nor"
+version = "0.1.0"
+edition = "2021"
+description = "D1/F133 SPI NOR over USB FEL (spinor read/write from xfel, D1s only)"
+license = "MIT"
+publish = false
+
+[lib]
+name = "xfel_spi_nor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xfel_spi_nor"
+path = "src/bin/xfel_spi_nor.rs"
+
+[dependencies]
+rusb = { version = "0.9" }
+thiserror = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+
+[features]
+default = []
+vendored = ["rusb/vendored"]

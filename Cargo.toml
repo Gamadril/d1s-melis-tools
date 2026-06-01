@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "dump_tool",
+    "minfs",
+    "image",
+    "gpt",
+    "dump",
+    "udisk",
+    "melis-boot",
+    "xfel_spi_nor",
+]
+exclude = ["sd_fel_switcher"]
+resolver = "2"
+
+[workspace.dependencies]
+binrw = "0.15"
+thiserror = "2"
+

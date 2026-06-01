@@ -1,0 +1,12 @@
+[build]
+target = "riscv64imac-unknown-none-elf"
+
+[target.riscv64imac-unknown-none-elf]
+linker = "riscv64-linux-gnu-gcc"
+rustflags = [
+    "-C", "relocation-model=static",
+    "-C", "link-arg=-Tlink.ld",
+    "-C", "link-arg=-nostdlib",
+    "-C", "link-arg=-static",
+    "-C", "target-feature=+zifencei",
+]

@@ -1,0 +1,10 @@
+[package]
+name = "minfs"
+version = "0.1.0"
+edition = "2021"
+description = "Melis MinFS ROOTFS partition pack and unpack"
+publish = false
+
+[dependencies]
+lzma-rust2 = "0.16"
+binrw = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "dump_tool"
+version = "0.1.0"
+edition = "2021"
+description = "CLI to extract and repack full Allwinner F133 Melis SPI NOR firmware dumps"
+publish = false
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+binrw = { workspace = true }
+dump = { path = "../dump" }
+gpt = { path = "../gpt" }
+minfs = { path = "../minfs" }
+image = { path = "../image" }
+udisk = { path = "../udisk" }
+melis-boot = { path = "../melis-boot" }

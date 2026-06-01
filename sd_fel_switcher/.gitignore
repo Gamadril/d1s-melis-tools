@@ -1,0 +1,4 @@
+/target/
+sd_fel_switcher.bin
+*.o
+*.elf

@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sd_fel_switcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install RISC-V cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
+
+      - name: Install RISC-V target and llvm-tools
+        run: |
+          rustup target add riscv64imac-unknown-none-elf
+          rustup component add llvm-tools-preview
+
+      - name: Build sd_fel_switcher.bin
+        run: ./sd_fel_switcher/build.sh build
+
+      - name: Upload sd_fel_switcher.bin
+        uses: actions/upload-artifact@v7
+        with:
+          name: sd-fel-switcher-bin
+          path: sd_fel_switcher/sd_fel_switcher.bin
+
+  build:
+    needs: sd_fel_switcher
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            slug: linux-x86_64
+            archive: tar.gz
+          - os: macos-latest
+            slug: macos-aarch64
+            archive: tar.gz
+          - os: windows-latest
+            slug: windows-x86_64
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Download sd_fel_switcher.bin (built on Linux)
+        uses: actions/download-artifact@v8
+        with:
+          name: sd-fel-switcher-bin
+          path: sd_fel_switcher
+
+      - name: Build host tools
+        run: cargo build --release -p dump_tool -p xfel_spi_nor --features xfel_spi_nor/vendored
+
+      - name: Package (Linux / macOS)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          PKG=dist/melis-tools-${{ matrix.slug }}
+          mkdir -p "${PKG}/bin" "${PKG}/sd_fel_switcher"
+          cp README.md "${PKG}/"
+          cp toolbox/*.sh "${PKG}/"
+          chmod +x "${PKG}"/*.sh
+          cp target/release/dump_tool "${PKG}/bin/"
+          cp target/release/xfel_spi_nor "${PKG}/bin/"
+          cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
+          tar -C dist -czf "dist/melis-tools-${{ matrix.slug }}.tar.gz" "melis-tools-${{ matrix.slug }}"
+          (cd dist && shasum -a 256 "melis-tools-${{ matrix.slug }}.tar.gz" > "melis-tools-${{ matrix.slug }}.tar.gz.sha256")
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          PKG=dist/melis-tools-${{ matrix.slug }}
+          mkdir -p "${PKG}/bin" "${PKG}/sd_fel_switcher"
+          cp README.md "${PKG}/"
+          cp toolbox/*.ps1 "${PKG}/"
+          cp target/release/dump_tool.exe "${PKG}/bin/"
+          cp target/release/xfel_spi_nor.exe "${PKG}/bin/"
+          cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
+          powershell -NoProfile -Command "Compress-Archive -Path 'dist/melis-tools-${{ matrix.slug }}' -DestinationPath 'dist/melis-tools-${{ matrix.slug }}.zip' -Force"
+          (cd dist && sha256sum "melis-tools-${{ matrix.slug }}.zip" > "melis-tools-${{ matrix.slug }}.zip.sha256")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: melis-tools-${{ matrix.slug }}
+          path: |
+            dist/melis-tools-${{ matrix.slug }}.${{ matrix.archive }}
+            dist/melis-tools-${{ matrix.slug }}.${{ matrix.archive }}.sha256
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/melis-tools-linux-x86_64.tar.gz
+            dist/melis-tools-linux-x86_64.tar.gz.sha256
+            dist/melis-tools-macos-aarch64.tar.gz
+            dist/melis-tools-macos-aarch64.tar.gz.sha256
+            dist/melis-tools-windows-x86_64.zip
+            dist/melis-tools-windows-x86_64.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

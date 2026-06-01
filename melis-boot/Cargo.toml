@@ -1,0 +1,10 @@
+[package]
+name = "melis-boot"
+version = "0.1.0"
+edition = "2021"
+description = "bootA TOC1 package: LZMA payload, melis-config, sys_config.fex"
+publish = false
+
+[dependencies]
+binrw = { workspace = true }
+lzma-rust = "0.1.5"
