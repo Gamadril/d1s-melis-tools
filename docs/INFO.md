@@ -58,7 +58,8 @@ Based on the flash dump `dump_hz_b500_1_7.bin`:
 | Image File | Offset | Size (Bytes) | Format | Description / Role |
 | :--- | :--- | :--- | :--- | :--- |
 | **`boot0.bin`** | `0x00000000` | `49,152` | eGON.BT0 | Primary bootloader (SPL) |
-| **`gpt.bin`** | `0x0000c000` | Variable | GPT Partition Table | Holds partitions `1_bootA`, `2_ROOTFS`, `3_UDISK` |
+| **`gpt.bin`** | `0x0000c000` | Variable | GPT disk image | Preamble (`0_ppt.bin`) + partitions `1_bootA`, `2_ROOTFS`, `3_UDISK` |
+| **`0_ppt.bin`** | Start of `gpt.bin` | `1,024` | GPT preamble | First two 512-byte LBAs: protective MBR (LBA 0) + primary GPT header beginning with `EFI PART` (LBA 1). Allwinner tooling label **PPT** (partition table); not userdata — leave unchanged when patching |
 | **`1_bootA.bin`** | Inside GPT | Variable | TOC1 / sunxi-package | Boot package containing kernel payload & config |
 | **`2_ROOTFS.bin`** | Inside GPT | `14,614,528` | MinFS | Allwinner proprietary RTOS filesystem (modules, apps, configurations) |
 | **`3_UDISK.bin`** | Inside GPT | `917,504` | FAT16 | User disk partition containing resources and config scripts |
@@ -66,6 +67,20 @@ Based on the flash dump `dump_hz_b500_1_7.bin`:
 ---
 
 ## 3. Extracted Sub-Components Detail
+
+### `0_ppt.bin` (GPT Preamble)
+
+Extracted from the first 1024 bytes of `gpt.bin` before numbered GPT partitions are read.
+
+| Byte range | GPT role | Typical content |
+| :--- | :--- | :--- |
+| `0x000`–`0x1FF` | Protective MBR (LBA 0) | Often all zeros on SPI NOR Melis images |
+| `0x200`–`0x3FF` | Primary GPT header (LBA 1) | Signature `EFI PART`, partition entry pointers, disk GUID |
+
+*   **Not** a mountable firmware partition — unlike `1_bootA`, `2_ROOTFS`, or `3_UDISK`.
+*   The `0_` prefix marks it as outside the GPT partition entry list (`1_` … `3_` come from partition names in the table).
+*   **PPT** = legacy Allwinner name for the partition-table area (sunxi MBR era); on F133/D1s the layout is GPT, but the extractor keeps the old filename.
+*   **Repacking:** `dump_tool pack` splices modified partition images into the original `gpt.bin` and preserves this header block automatically. You do not need to edit or restore `0_ppt.bin` for normal ROOTFS / UDISK / `sys_config.fex` workflows.
 
 ### `1_bootA.bin.out/` (TOC1 Container Output)
 *   **`melis-config.bin`**: The binary-compiled `sys_config.bin` containing hardware configurations. Can be decompiled to human-readable FEX format.

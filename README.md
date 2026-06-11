@@ -43,15 +43,21 @@ You can use the compiled executables directly...
 ```text
 boot0.bin                   # eGON SPL, first stage (~49 KiB at SPI NOR offset 0)
 gpt.bin.out/
+  0_ppt.bin                 # GPT preamble (LBA 0–1): protective MBR + primary GPT header — not a data partition
+  1_bootA.bin               # raw GPT partition image
   1_bootA.bin.out/          # TOC1 boot package
     epos.img                # OpenSBI + Melis kernel
     melis-config.bin
     sys_config.fex          # decompiled hardware config
     pin_mappings.md         # created sumary just for info
     melis-lzma.bin
+  2_ROOTFS.bin              # raw GPT partition image
   2_ROOTFS.bin.out/         # MinFS (apps/, mod/, res/)
+  3_UDISK.bin               # raw GPT partition image
   3_UDISK.bin.out/          # FAT16 user disk
 ```
+
+`0_ppt.bin` is extracted for inspection only. `dump_tool pack` keeps the original `gpt.bin` header region and does not read `0_ppt.bin`. See [docs/INFO.md](docs/INFO.md) for layout details.
 
 ## Boot Chain
 
