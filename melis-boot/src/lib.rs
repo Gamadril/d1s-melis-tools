@@ -58,11 +58,7 @@ fn find_subkey_value_offset(data: &[u8], name: &str) -> Result<(usize, usize), S
 }
 
 /// Patch UART debug settings inside a melis-config.bin payload.
-pub fn patch_melis_config_uart(
-    data: &mut [u8],
-    baudrate: i32,
-    rx_mux: i32,
-) -> Result<(), String> {
+pub fn patch_melis_config_uart(data: &mut [u8], baudrate: i32, rx_mux: i32) -> Result<(), String> {
     let (baud_off, baud_type) = find_subkey_value_offset(data, "uart_debug_baudrate")?;
     if baud_type != 1 {
         return Err("uart_debug_baudrate is not an integer subkey".to_string());
@@ -152,7 +148,10 @@ pub fn patch_melis_config_uart0(data: &mut Vec<u8>) -> Result<(), String> {
         .len()
         .checked_sub(INSERT_SIZE)
         .ok_or("melis-config.bin too small for uart0 subkeys")?;
-    if data[insert_at..insert_at + INSERT_SIZE].iter().any(|b| *b != 0) {
+    if data[insert_at..insert_at + INSERT_SIZE]
+        .iter()
+        .any(|b| *b != 0)
+    {
         return Err(
             "No trailing padding in melis-config.bin for uart0 subkeys; cannot patch in-place"
                 .to_string(),
@@ -225,7 +224,10 @@ pub fn apply_sys_config_fex_uart_patches(
 }
 
 fn parse_fex_int(value: &str) -> Result<i32, String> {
-    if let Some(hex) = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")) {
+    if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
         i32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex integer {}: {}", value, e))
     } else {
         value
@@ -298,8 +300,7 @@ pub fn pack(
             break;
         }
     }
-    let config_item =
-        config_item.ok_or("melis-config item not found in boot template")?;
+    let config_item = config_item.ok_or("melis-config item not found in boot template")?;
 
     if config.len() > config_item.length as usize {
         return Err(format!(
@@ -337,7 +338,11 @@ pub fn pack(
 
 fn decompress_lzma(compressed: &[u8]) -> Result<Vec<u8>, String> {
     if compressed.len() >= 14 {
-        println!("melis-boot LZMA payload b = {:02X}, code = {:08X}", compressed[13], u32::from_be_bytes(compressed[14..18].try_into().unwrap()));
+        println!(
+            "melis-boot LZMA payload b = {:02X}, code = {:08X}",
+            compressed[13],
+            u32::from_be_bytes(compressed[14..18].try_into().unwrap())
+        );
     }
     let mut reader = std::io::Cursor::new(compressed);
     let mut lzma_reader = LZMAReader::new_mem_limit(&mut reader, u32::MAX, None)
@@ -574,7 +579,7 @@ fn generate_pin_mappings_md(fex_str: &str) -> String {
 
 fn analyze_kernel(data: &[u8]) {
     println!("\n=== Melis Kernel Analysis ===");
-    
+
     // Check for common headers and magic bytes
     if data.len() < 512 {
         println!("  Warning: Kernel too small ({} bytes)", data.len());
@@ -585,10 +590,16 @@ fn analyze_kernel(data: &[u8]) {
     if data.len() >= 4 && &data[0..4] == b"\x7fELF" {
         println!("  Format: ELF executable");
         if data.len() >= 5 {
-            println!("  Class: {}", if data[4] == 1 { "32-bit" } else { "64-bit" });
+            println!(
+                "  Class: {}",
+                if data[4] == 1 { "32-bit" } else { "64-bit" }
+            );
         }
         if data.len() >= 6 {
-            println!("  Endianness: {}", if data[5] == 1 { "Little" } else { "Big" });
+            println!(
+                "  Endianness: {}",
+                if data[5] == 1 { "Little" } else { "Big" }
+            );
         }
         if data.len() >= 18 {
             let machine = u16::from_le_bytes([data[18], data[19]]);
@@ -637,7 +648,11 @@ fn analyze_kernel(data: &[u8]) {
         println!("  Entry point (first 16 bytes): {:02X?}", &data[0..16]);
     }
 
-    println!("  Total size: {} KB ({} bytes)\n", data.len() / 1024, data.len());
+    println!(
+        "  Total size: {} KB ({} bytes)\n",
+        data.len() / 1024,
+        data.len()
+    );
 }
 
 pub fn extract(boot_path: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<(), String> {

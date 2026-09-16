@@ -15,8 +15,8 @@ Get the latest Release Build for your platform to start.
 
 ## Tools
 
-Only **`dump_tool`** is intended for day-to-day use.
-The other crates (`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`) are internal libraries wired into it.
+Day-to-day binaries: **`dump_tool`** (firmware) and **`data_renderer`** (`.data` UI).
+The other crates (`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`, `melis-data`) are internal libraries.
 
 You can use the compiled executables directly...
 ```bash
@@ -89,5 +89,18 @@ Sub-crate roles (internal only):
 
 See the following documentation files for detailed technical information:
 
-* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, device-specific 
+* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, `.data` UI format, device-specific 
 * [docs/PIN_MAPPING.md](docs/PIN_MAPPING.md) — F133 GPIO / mux reference
+
+## `.data` UI tools
+
+```bash
+./data_renderer path/to/Main.data
+./data_renderer --lang en path/to/Main.data
+```
+
+Opens a window for one `.data` and prints the widget/resource tree on stdout.
+Quick viewer: 1:1 surface blit, not a pixel-accurate device compositor.
+`--lang` picks a column from `apps/Language` when that directory sits next to `Data/`.
+
+See [docs/INFO.md](docs/INFO.md) §7 for the `.data` format.

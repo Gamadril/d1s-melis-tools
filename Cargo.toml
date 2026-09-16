@@ -7,6 +7,8 @@ members = [
     "dump",
     "udisk",
     "melis-boot",
+    "melis-data",
+    "data_renderer",
     "xfel_spi_nor",
 ]
 exclude = ["sd_fel_switcher"]
@@ -15,4 +17,4 @@ resolver = "2"
 [workspace.dependencies]
 binrw = "0.15"
 thiserror = "2"
-
+flate2 = "1"

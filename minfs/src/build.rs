@@ -205,12 +205,9 @@ fn parse_elf_module(
                     .write(&mut comp_writer)
                     .map_err(|e| format!("Failed to write LZMA probs: {}", e))?;
 
-                let mut lzma_writer = LzmaWriter::new_no_header(
-                    &mut comp_writer,
-                    &lzma_option,
-                    false,
-                )
-                .map_err(|e| format!("Failed to create LZMA writer: {}", e))?;
+                let mut lzma_writer =
+                    LzmaWriter::new_no_header(&mut comp_writer, &lzma_option, false)
+                        .map_err(|e| format!("Failed to create LZMA writer: {}", e))?;
 
                 lzma_writer
                     .write_all(&final_sec_data)
@@ -340,12 +337,9 @@ pub(crate) fn build_fs(
                         .write(&mut comp_writer)
                         .map_err(|e| format!("Failed to write LZMA probs: {}", e))?;
 
-                    let mut lzma_writer = LzmaWriter::new_no_header(
-                        &mut comp_writer,
-                        &lzma_option,
-                        false,
-                    )
-                    .map_err(|e| format!("Failed to create LZMA writer: {}", e))?;
+                    let mut lzma_writer =
+                        LzmaWriter::new_no_header(&mut comp_writer, &lzma_option, false)
+                            .map_err(|e| format!("Failed to create LZMA writer: {}", e))?;
 
                     lzma_writer
                         .write_all(&raw_data)

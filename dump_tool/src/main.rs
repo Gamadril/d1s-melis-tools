@@ -38,7 +38,10 @@ fn main() -> Result<(), String> {
             Mode::Extract => {
                 println!("🔍 DRY RUN MODE: No files will be modified");
                 println!("  Input file: {}", args.input.display());
-                println!("  Output directory: {} (would be created)", args.output.display());
+                println!(
+                    "  Output directory: {} (would be created)",
+                    args.output.display()
+                );
                 println!("  Operations planned:");
                 println!("    1. Extract boot0.bin and GPT");
                 println!("    2. Extract 1_bootA (kernel)");
@@ -48,7 +51,10 @@ fn main() -> Result<(), String> {
             Mode::Pack => {
                 println!("🔍 DRY RUN MODE: No files will be modified");
                 println!("  Input directory: {}", args.input.display());
-                println!("  Output file: {} (would be created)", args.output.display());
+                println!(
+                    "  Output file: {} (would be created)",
+                    args.output.display()
+                );
                 println!("  Operations planned:");
                 println!("    1. Pack ROOTFS directory (2_ROOTFS.bin.out)");
                 println!("    2. Pack UDISK directory (3_UDISK.bin.out)");
@@ -71,7 +77,10 @@ fn main() -> Result<(), String> {
         let mut gpt_out_path = PathBuf::from(&args.output);
         gpt_out_path.push("gpt.bin.out");
         if args.verbose {
-            println!("  Extracting GPT partitions from: {}", gpt_in_path.display());
+            println!(
+                "  Extracting GPT partitions from: {}",
+                gpt_in_path.display()
+            );
         }
         extract_partitions(&gpt_in_path, &gpt_out_path)?;
 
@@ -80,7 +89,10 @@ fn main() -> Result<(), String> {
         let mut rootfs_out_path = PathBuf::from(&gpt_out_path);
         rootfs_out_path.push("2_ROOTFS.bin.out");
         if args.verbose {
-            println!("  Extracting ROOTFS (MinFS) from: {}", rootfs_in_path.display());
+            println!(
+                "  Extracting ROOTFS (MinFS) from: {}",
+                rootfs_in_path.display()
+            );
         }
         minfs::extract(&rootfs_in_path, &rootfs_out_path)?;
 
@@ -89,7 +101,10 @@ fn main() -> Result<(), String> {
         let mut udisk_out_path = PathBuf::from(&gpt_out_path);
         udisk_out_path.push("3_UDISK.bin.out");
         if args.verbose {
-            println!("  Extracting UDISK (FAT16) from: {}", udisk_in_path.display());
+            println!(
+                "  Extracting UDISK (FAT16) from: {}",
+                udisk_in_path.display()
+            );
         }
         udisk::extract(&udisk_in_path, &udisk_out_path)?;
 
@@ -98,7 +113,10 @@ fn main() -> Result<(), String> {
         let mut boot_out_path = PathBuf::from(&gpt_out_path);
         boot_out_path.push("1_bootA.bin.out");
         if args.verbose {
-            println!("  Extracting bootA (TOC1 package) from: {}", boot_in_path.display());
+            println!(
+                "  Extracting bootA (TOC1 package) from: {}",
+                boot_in_path.display()
+            );
         } else {
             println!(
                 "Extracting boot package {:?} to {:?}",
@@ -181,10 +199,7 @@ fn main() -> Result<(), String> {
         if args.verbose {
             println!("  Repacking bootA package");
         } else {
-            println!(
-                "Repacking bootA {:?} -> {:?}",
-                boot_template, boot_repacked
-            );
+            println!("Repacking bootA {:?} -> {:?}", boot_template, boot_repacked);
         }
         melis_boot::pack(&boot_template, &config_path, &boot_repacked)?;
 

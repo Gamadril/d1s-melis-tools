@@ -3,7 +3,7 @@
 
 // eGON.BT0 header + BROM entry (must live in .text._start, see link.ld)
 core::arch::global_asm!(
-  r#"
+    r#"
     .option norvc
     .section .text._start, "ax", @progbits
     .global _start
@@ -49,128 +49,128 @@ const BROM_FEL: u32 = 0x20;
 
 #[inline(always)]
 unsafe fn reg32(addr: usize) -> *mut u32 {
-  addr as *mut u32
+    addr as *mut u32
 }
 
 #[inline(always)]
 unsafe fn read32(addr: usize) -> u32 {
-  read_volatile(reg32(addr))
+    read_volatile(reg32(addr))
 }
 
 #[inline(always)]
 unsafe fn write32(addr: usize, val: u32) {
-  write_volatile(reg32(addr), val);
-  compiler_fence(Ordering::SeqCst);
+    write_volatile(reg32(addr), val);
+    compiler_fence(Ordering::SeqCst);
 }
 
 fn delay_ms(ms: u32) {
-  for _ in 0..ms {
-    for _ in 0..24_000 {
-      core::hint::spin_loop();
+    for _ in 0..ms {
+        for _ in 0..24_000 {
+            core::hint::spin_loop();
+        }
     }
-  }
 }
 
 fn board_clock_reset() {
-  unsafe {
-    let mut v = read32(CCU_AHB1_CFG);
-    v &= !((0x3 << 24) | (0x3 << 8) | 0x3);
-    write32(CCU_AHB1_CFG, v);
+    unsafe {
+        let mut v = read32(CCU_AHB1_CFG);
+        v &= !((0x3 << 24) | (0x3 << 8) | 0x3);
+        write32(CCU_AHB1_CFG, v);
 
-    v = read32(CCU_APB1_CFG);
-    v &= !((0x3 << 24) | (0x3 << 8) | 0x3);
-    write32(CCU_APB1_CFG, v);
+        v = read32(CCU_APB1_CFG);
+        v &= !((0x3 << 24) | (0x3 << 8) | 0x3);
+        write32(CCU_APB1_CFG, v);
 
-    write32(CCU_CPUX_AXI, 0x0301);
-  }
+        write32(CCU_CPUX_AXI, 0x0301);
+    }
 }
 
 fn usb0_clock_on() {
-  unsafe {
-    let mut v = read32(CCU_USB_BGR);
-    v |= 1 << 16;
-    write32(CCU_USB_BGR, v);
-  }
-  delay_ms(1);
-  unsafe {
-    let mut v = read32(CCU_USB_BGR);
-    v |= 1 << 0;
-    write32(CCU_USB_BGR, v);
-  }
+    unsafe {
+        let mut v = read32(CCU_USB_BGR);
+        v |= 1 << 16;
+        write32(CCU_USB_BGR, v);
+    }
+    delay_ms(1);
+    unsafe {
+        let mut v = read32(CCU_USB_BGR);
+        v |= 1 << 0;
+        write32(CCU_USB_BGR, v);
+    }
 }
 
 fn rtc_clear_fel_flag() {
-  loop {
-    unsafe {
-      write32(RTC_FEL, 0);
-      if read32(RTC_FEL) == 0 {
-        break;
-      }
+    loop {
+        unsafe {
+            write32(RTC_FEL, 0);
+            if read32(RTC_FEL) == 0 {
+                break;
+            }
+        }
     }
-  }
 }
 
 #[inline(never)]
 fn boot0_jmp_fel(addr: u32) -> ! {
-  unsafe {
-    asm!(
-      "mv a0, {0}",
-      "jr a0",
-      in(reg) addr,
-      options(noreturn),
-    );
-  }
+    unsafe {
+        asm!(
+          "mv a0, {0}",
+          "jr a0",
+          in(reg) addr,
+          options(noreturn),
+        );
+    }
 }
 
 fn enter_fel() -> ! {
-  board_clock_reset();
-  usb0_clock_on();
-  delay_ms(10);
-  boot0_jmp_fel(BROM_FEL);
+    board_clock_reset();
+    usb0_clock_on();
+    delay_ms(10);
+    boot0_jmp_fel(BROM_FEL);
 }
 
 fn system_reset() -> ! {
-  unsafe {
-    write32(SYS_RST, SYS_RST_VAL);
-  }
-  loop {
     unsafe {
-      asm!("wfi", options(nomem, nostack));
+        write32(SYS_RST, SYS_RST_VAL);
     }
-  }
+    loop {
+        unsafe {
+            asm!("wfi", options(nomem, nostack));
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
-  unsafe {
-    let mut v = read32(R_AHB_BUS_RTC);
-    v |= (1 << 16) | (1 << 0);
-    write32(R_AHB_BUS_RTC, v);
-  }
-
-  if unsafe { read32(RTC_FEL) } == EFEX_FLAG {
-    rtc_clear_fel_flag();
-    enter_fel();
-  }
-
-  enter_fel();
-
-  #[allow(unreachable_code)]
-  loop {
     unsafe {
-      write32(RTC_FEL, EFEX_FLAG);
-      if read32(RTC_FEL) == EFEX_FLAG {
-        break;
-      }
+        let mut v = read32(R_AHB_BUS_RTC);
+        v |= (1 << 16) | (1 << 0);
+        write32(R_AHB_BUS_RTC, v);
     }
-  }
 
-  system_reset();
+    if unsafe { read32(RTC_FEL) } == EFEX_FLAG {
+        rtc_clear_fel_flag();
+        enter_fel();
+    }
+
+    enter_fel();
+
+    #[allow(unreachable_code)]
+    loop {
+        unsafe {
+            write32(RTC_FEL, EFEX_FLAG);
+            if read32(RTC_FEL) == EFEX_FLAG {
+                break;
+            }
+        }
+    }
+
+    system_reset();
 }
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
-  loop {
-    core::hint::spin_loop();
-  }
+    loop {
+        core::hint::spin_loop();
+    }
 }

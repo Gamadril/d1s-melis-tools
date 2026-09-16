@@ -11,7 +11,7 @@ use binrw::io::Cursor;
 use binrw::io::Read;
 use binrw::io::Seek;
 use binrw::io::Write;
-use binrw::{BinRead, BinReaderExt, BinWrite};
+use binrw::{BinRead, BinWrite};
 
 use crate::structs::*;
 
@@ -220,11 +220,14 @@ fn extract_file(
                 let end = start + mfs_sec.record_size as usize;
                 let sec_buffer = &buffer[start..end];
                 let mut sec_reader = Cursor::new(sec_buffer);
-                let probs: LzmaProbs = sec_reader.read_le().unwrap();
+                let probs = LzmaProbs::read_le(&mut sec_reader).unwrap();
                 let b = sec_buffer[5];
                 let code_bytes = &sec_buffer[6..10];
                 let code = u32::from_be_bytes(code_bytes.try_into().unwrap());
-                println!("File {}, Section {:?}: b={:02X}, code={:08X}", name, mfs_sec.section_type, b, code);
+                println!(
+                    "File {}, Section {:?}: b={:02X}, code={:08X}",
+                    name, mfs_sec.section_type, b, code
+                );
 
                 let mut lzma_reader = LzmaReader::new_with_props(
                     sec_reader,
@@ -317,7 +320,7 @@ fn extract_file(
         println!("File {} (compressed): b={:02X}, code={:08X}", name, b, code);
 
         let mut sec_reader = Cursor::new(buffer);
-        let probs: LzmaProbs = sec_reader.read_le().unwrap();
+        let probs = LzmaProbs::read_le(&mut sec_reader).unwrap();
 
         let mut lzma_reader = LzmaReader::new_with_props(
             sec_reader,

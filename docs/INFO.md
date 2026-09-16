@@ -270,3 +270,124 @@ Wireless CarPlay support requires a physical **Apple MFi Authentication Coproces
 **Discovery Notes:**
 *   The exact I2C slave address of the MFi coprocessor can be sniffed from the TWI2 lines using a logic analyzer
 *   See [PIN_MAPPING.md](PIN_MAPPING.md) for TWI2 device address table and additional sensor mappings
+
+---
+
+## 7. Melis `.data` UI format
+
+This section is reverse-engineered from `init.axf` (with AI assistance). Offsets, types, and paint rules may be incomplete or wrong.
+
+Car UI screens live in `2_ROOTFS` as `apps/Data/*.data` (UTF-16LE magic `DATA`, version `V1.0`). `desktop.mod` only installs `apps/init.axf`; `init.axf` is the compositor. `melis-data` parses the format; `data_renderer` is a quick viewer (1:1 blit, not a device compositor) and prints the widget tree.
+
+This is **not** Melis 4.0 orange/`GUI_LyrWin`. Same desktop/display shell, different UI manager: widgets are deserialized from `.data` and 1:1-blitted.
+
+### File layout
+
+Little-endian. Typical canvas 1024×600.
+
+| Offset | Size | Field |
+| :--- | :--- | :--- |
+| `0x00` | 8 | Magic, UTF-16LE `DATA` |
+| `0x08` | 8 | Version, UTF-16LE `V1.0` |
+| `0x10` | 4 | Header size (always `0x20`) |
+| `0x14` | 4 | Declared main size |
+| `0x18` | 8 | Reserved |
+| `header_size` | 4 | Section size |
+| +4 | 4 | Section metadata size (usually 20) |
+| +8 | metadata | Screen + descriptor count (see below) |
+| after metadata | 8×N | Descriptor table |
+| after section | 4+8×M | Resource table: count, then `{file_offset, size}` |
+
+Section metadata words (u32):
+
+| Word | Meaning |
+| :--- | :--- |
+| 0, 1 | Unused / flags |
+| 2, 3 | Screen width, height |
+| 4 | Descriptor count |
+
+Each descriptor is two u32s. Kind **5** is a UI widget tree; the other word is the file offset of that tree. Kind **6** appears in some files as a sibling record. The parser treats the word that is `5` or `6` as the kind and the other in-range offset as the payload.
+
+### Widget block
+
+```text
+u32 total_size
+u32 metadata_size
+u8  metadata[metadata_size]   // parser cap: 0: 0x1c4, 1/2: 0x100, 3: 0x108, 4: 0xf8, 5: 0x1cc
+… nested child slots (8 bytes: type, relative offset) …
+… type-specific tail (type 4 image list) …
+```
+
+UTF-16LE name sits at the start of metadata (NUL-terminated). Rect is four u32s: type 0 at `+0x194`, all other types at `+0xcc` (`x, y, w, h`). Off-screen rects with `w,h > 0` (e.g. MainApp icons at x=1084) are kept; the runtime clips, it does not stretch them to the screen.
+
+Nested children start at `block + 8 + metadata_size` (the *file* metadata size, not the parser cap). Each slot is `{type, offset}`.
+
+| Type | Role | Idle bitmap | Nested |
+| :--- | :--- | :--- | :--- |
+| 0 | Text | — | — |
+| 1 | Button | four indices at `+0xdc` (idle first) | optional type-4 image if `+0xfc`, type-0 caption if `+0xf4` |
+| 2 | Slider | surface list at `+0xdc` (runtime lays out track/fill/thumb or stacks clock layers). `data_renderer` blits every listed surface 1:1 at the origin | optional caption if `+0xf8` |
+| 3 | Grid / list | `+0xdc` columns, `+0xe0` rows, `+0xe4/+0xe8` cell size | up to 4 templates + caption if `+0x100` |
+| 4 | Image | see below | optional type-0 if `+0xe0` |
+| 5 | View (layer) | one index at `+0xdc` (`0xffffffff` = none) | `+0xec` child count |
+
+Type 0 extras: UTF-16 text at `+0xcc..+0x194`, RGB at `+0x1a8`, align at `+0x1c0` bits 0..1 (0 left, 1 center, 2 right). Type 1/2 `string_id` at `+0xf0`.
+
+**Type 4** does **not** store the resource index at `+0xdc` (`+0xdc` is an image *kind*). After metadata, skip 8 bytes if `+0xe0` or `+0xe4` is set, then `count` at `+0xe8` of `(kind, resource_index)` pairs. Idle blit uses the pair whose kind matches `+0xdc`; remaining pairs follow. Example: `CarComputer.data` car body `(0x63, 0)` 126×275, doors/trunk `(0x6f, 1..5)`.
+
+Idle paint copies the **surface’s native `w×h`** at the widget origin (clip to dest). Do not scale the bitmap to the widget rect. Type-1 MainLink icons are 126×126 in a 126×160 hit box (caption in the leftover 34px). Type-5 `BtBook` panel is 531×432 in a 535×432 view — scaling the view desyncs baked chrome from child sprites.
+
+### Resources / surfaces
+
+Table follows the main section (tried at section end, then `main_size`, then `0x20 + main_size`). Count is u32, then `{file_offset, size}` × count. Each blob is `size + 0x18` bytes: a 0x18-byte header plus payload.
+
+| Offset | Field |
+| :--- | :--- |
+| `+0x00` | Payload offset inside the blob (used if `≥ 0x18`; else payload starts at `0x18`) |
+| `+0x04` | Width |
+| `+0x08` | Height |
+| `+0x0c` | Format |
+| `+0x10` | Decode method |
+
+| Format | Bytes/pixel | Layout |
+| :--- | :--- | :--- |
+| 1 | 4 | BGRA8888 |
+| 2 | 2 | RGB565 LE, opaque |
+| 3 | 3 | RGB565 LE + A5 in the third byte |
+
+Row stride is `(width * bpp + 3) & ~3`. Decode method: `0` raw, `1` row RLE, `2` palette RLE, `3` zlib (flate). Fallback if the table is missing: scan for PNG/BMP signatures.
+
+Format 3 blit: `a=0` skip (keep dest); `a=0x1f` copy (`pixel==0` becomes `0x0841`, the runtime’s near-black); else blend. `Power.data` is a full-screen format-2 fill of `0x0841` — a black power/ACC-off page, not a decode miss.
+
+### Runtime composite
+
+After a **content** page load, overlay widget arrays are spliced in (skipped when the file itself is an overlay):
+
+| Layer | File | Notes |
+| :--- | :--- | :--- |
+| 0 | `WallPaper.data` | Empty shell: type-5, no surfaces. JPEGs `apps/WallPaper/{0..5}.jpg` are bound at runtime. |
+| 3 | `SystemBar.data` | Two type-5 views: idle bar 1024×64, plus a 1024×600 pulldown. Idle chrome is the first view only. |
+| 4 | `VolumeBar.data` | Event overlay |
+| 5 | `TipBox.data` | Event overlay |
+
+Page ids (home / back string ids `0x48` / `0x11` / `0x71` / `0x200` → **1**):
+
+| Id | File |
+| :--- | :--- |
+| 1 / `0x65` | `Main.data` |
+| 2 | `Main2.data` |
+| 3 | `MainApp.data` |
+| 4 | `MainSetup.data` (else `SetupMenu.data`) |
+| 6 | `MainMedia.data` |
+| 7 | `MainAux.data` |
+| 8 | `MainLink.data` |
+| 9 | `CarPlay.data` / `MainLinkCarPlay.data` |
+| 10 | `AndroidAuto.data` / `MainLinkAuto.data` |
+| `0xb` | `MirrorIphone.data` / `MainLinkMirrorIphone.data` |
+| `0xd` | `MirrorAndroid.data` / `MainLinkMirrorAndroid.data` |
+| `0xe` | `AndroidWireless.data` |
+| `0xc9` | `MainAudioOutput.data` |
+
+`CarComputer.data` is a separate content page (open by filename); it is not the default `0xc9` candidate.
+
+Language tables: `apps/Language/*.txt`, header `//	原始	英文	…`, rows `{	key	en	zh	…}`. `data_renderer --lang en` picks the English column.

@@ -1,0 +1,10 @@
+[package]
+name = "melis-data"
+version = "0.1.0"
+edition = "2021"
+description = "Lossless parser for Melis declarative UI .data containers"
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+flate2.workspace = true

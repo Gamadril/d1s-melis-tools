@@ -6,7 +6,7 @@ description = "CLI to extract and repack full Allwinner F133 Melis SPI NOR firmw
 publish = false
 
 [dependencies]
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 binrw = { workspace = true }
 dump = { path = "../dump" }
 gpt = { path = "../gpt" }

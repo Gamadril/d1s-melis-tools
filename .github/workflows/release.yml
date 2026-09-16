@@ -59,6 +59,14 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Linux GUI build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev libwayland-dev pkg-config
+
       - name: Download sd_fel_switcher.bin (built on Linux)
         uses: actions/download-artifact@v8
         with:
@@ -66,7 +74,7 @@ jobs:
           path: sd_fel_switcher
 
       - name: Build host tools
-        run: cargo build --release -p dump_tool -p xfel_spi_nor --features xfel_spi_nor/vendored
+        run: cargo build --release -p dump_tool -p data_renderer -p xfel_spi_nor --features xfel_spi_nor/vendored
 
       - name: Package (Linux / macOS)
         if: matrix.archive == 'tar.gz'
@@ -77,6 +85,7 @@ jobs:
           cp toolbox/*.sh "${PKG}/"
           chmod +x "${PKG}"/*.sh
           cp target/release/dump_tool "${PKG}/bin/"
+          cp target/release/data_renderer "${PKG}/bin/"
           cp target/release/xfel_spi_nor "${PKG}/bin/"
           cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
           tar -C dist -czf "dist/melis-tools-${{ matrix.slug }}.tar.gz" "melis-tools-${{ matrix.slug }}"
@@ -90,6 +99,7 @@ jobs:
           cp README.md "${PKG}/"
           cp toolbox/*.ps1 "${PKG}/"
           cp target/release/dump_tool.exe "${PKG}/bin/"
+          cp target/release/data_renderer.exe "${PKG}/bin/"
           cp target/release/xfel_spi_nor.exe "${PKG}/bin/"
           cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
           powershell -NoProfile -Command "Compress-Archive -Path 'dist/melis-tools-${{ matrix.slug }}' -DestinationPath 'dist/melis-tools-${{ matrix.slug }}.zip' -Force"

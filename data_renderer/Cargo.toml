@@ -1,0 +1,13 @@
+[package]
+name = "data_renderer"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform egui renderer for Melis declarative UI data"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+eframe = "0.36"
+egui = "0.36"
+image = { version = "0.25", default-features = false, features = ["bmp", "png"] }
+melis-data = { path = "../melis-data" }
