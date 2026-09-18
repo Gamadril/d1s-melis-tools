@@ -23,7 +23,10 @@ You can use the compiled executables directly...
 # Unpack full SPI NOR dump → boot0, GPT partitions, MinFS, UDISK, bootA (epos.img + sys_config.fex)
 ./dump_tool extract dump.bin out_dir
 
-# Repack after editing unpacked tree (ROOTFS, UDISK, bootA sys_config.fex, …)
+# Repack after editing unpacked tree (ROOTFS, UDISK, …). Editing bootA's
+# sys_config.fex does NOT get picked up automatically - recompile it into
+# melis-config.bin first (see docs/INFO.md, "Extra: Manually Recompiling
+# sys_config.fex") if you changed it.
 ./dump_tool pack out_dir dump.repacked.bin
 ```
 
@@ -72,7 +75,7 @@ Sub-crate roles (internal only):
 |--------------|-----------------------------------------------------|
 | `dump`       | Raw NOR dump header                                 |
 | `gpt`        | Partition extract/splice                            |
-| `melis-boot` | bootA TOC1, LZMA, `sys_config` decompile/patch/pack |
+| `melis-boot` | bootA TOC1 pack/unpack, LZMA extract, `sys_config` decompile/compile |
 | `minfs`      | ROOTFS pack/unpack                                  |
 | `udisk`      | UDISK FAT16 pack/unpack                             |
 | `image`      | eGON / CHK headers                                  |

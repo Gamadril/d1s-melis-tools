@@ -58,7 +58,7 @@ fn main() -> Result<(), String> {
                 println!("  Operations planned:");
                 println!("    1. Pack ROOTFS directory (2_ROOTFS.bin.out)");
                 println!("    2. Pack UDISK directory (3_UDISK.bin.out)");
-                println!("    3. Repack bootA with sys_config.fex patches");
+                println!("    3. Repack bootA with melis-config.bin as extracted");
                 println!("    4. Splice all partitions into GPT image");
                 println!("    5. Write final firmware image");
             }
@@ -195,7 +195,11 @@ fn main() -> Result<(), String> {
         }
         udisk::pack(&udisk_dir, &udisk_repacked, udisk_partition_size as u64)?;
 
-        // 5. Repack bootA with patched sys_config
+        // 5. Repack bootA. melis-config.bin is used exactly as it sits in
+        // input_dir - pack never edits it. To carry sys_config.fex edits
+        // into the repacked image, recompile melis-config.bin yourself
+        // first (see docs/INFO.md, "Extra: Manually Recompiling
+        // sys_config.fex") before running pack.
         let mut boot_out_dir = PathBuf::from(input_dir);
         boot_out_dir.push("gpt.bin.out");
         boot_out_dir.push("1_bootA.bin.out");
@@ -208,10 +212,6 @@ fn main() -> Result<(), String> {
         boot_repacked.push("gpt.bin.out");
         boot_repacked.push("1_bootA.bin.repacked");
 
-        // UART debug settings (baudrate/pin mux) in melis-config.bin are
-        // left exactly as extracted here. Syncing them from sys_config.fex
-        // is board-specific and not pack's job - see INFO.md, "Manually
-        // syncing UART debug settings" for how to do it deliberately.
         let config_path = boot_out_dir.join("melis-config.bin");
         if args.verbose {
             println!("  Repacking bootA package");
