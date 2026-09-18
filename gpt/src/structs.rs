@@ -33,7 +33,7 @@ pub struct GPTHeader {
 #[br(little)]
 pub struct EFIPartitionEntry {
     #[br(count = 16)]
-    partition_type_guid: Vec<u8>,
+    pub partition_type_guid: Vec<u8>,
     #[br(count = 16)]
     unique_partition_guid: Vec<u8>,
     pub starting_lba: u64,

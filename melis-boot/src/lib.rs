@@ -7,6 +7,9 @@ use std::path::Path;
 pub mod structs;
 use structs::{Toc1ItemInfo, Toc1MainInfo};
 
+pub mod fex_compiler;
+pub use fex_compiler::compile_sys_config;
+
 use lzma_rust::LZMAReader;
 
 const TOC1_MAGIC: u32 = 0x8911_9800;
@@ -38,218 +41,6 @@ fn calc_toc1_checksum(data: &[u8]) -> u32 {
         count -= 1;
     }
     sum
-}
-
-fn find_subkey_value_offset(data: &[u8], name: &str) -> Result<(usize, usize), String> {
-    let needle = name.as_bytes();
-    let idx = data
-        .windows(needle.len())
-        .position(|window| window == needle)
-        .ok_or_else(|| format!("Subkey {} not found in melis-config.bin", name))?;
-
-    if idx + 40 > data.len() {
-        return Err(format!("Subkey header for {} out of bounds", name));
-    }
-
-    let val_word_offset = u32::from_le_bytes(data[idx + 32..idx + 36].try_into().unwrap());
-    let type_info = u32::from_le_bytes(data[idx + 36..idx + 40].try_into().unwrap());
-    let val_type = ((type_info >> 16) & 0xFFFF) as usize;
-    Ok(((val_word_offset * 4) as usize, val_type))
-}
-
-/// Patch UART debug settings inside a melis-config.bin payload.
-pub fn patch_melis_config_uart(data: &mut [u8], baudrate: i32, rx_mux: i32) -> Result<(), String> {
-    let (baud_off, baud_type) = find_subkey_value_offset(data, "uart_debug_baudrate")?;
-    if baud_type != 1 {
-        return Err("uart_debug_baudrate is not an integer subkey".to_string());
-    }
-    data[baud_off..baud_off + 4].copy_from_slice(&baudrate.to_le_bytes());
-
-    let (gpio_off, gpio_type) = find_subkey_value_offset(data, "uart_debug_rx")?;
-    if gpio_type != 4 {
-        return Err("uart_debug_rx is not a GPIO subkey".to_string());
-    }
-    data[gpio_off + 8..gpio_off + 12].copy_from_slice(&rx_mux.to_le_bytes());
-    Ok(())
-}
-
-struct ConfigGroup {
-    name: String,
-    len: u32,
-    header_off: usize,
-}
-
-fn parse_config_groups(data: &[u8]) -> Result<Vec<ConfigGroup>, String> {
-    if data.len() < 16 {
-        return Err("Configuration data too short".to_string());
-    }
-    let item_num = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
-    let mut groups = Vec::with_capacity(item_num);
-    let mut offset = 16usize;
-    for _ in 0..item_num {
-        if offset + 40 > data.len() {
-            return Err("Unexpected EOF reading config groups".to_string());
-        }
-        let name = String::from_utf8_lossy(&data[offset..offset + 32])
-            .trim_end_matches('\0')
-            .to_string();
-        let len = u32::from_le_bytes(data[offset + 32..offset + 36].try_into().unwrap());
-        let _word_off = u32::from_le_bytes(data[offset + 36..offset + 40].try_into().unwrap());
-        groups.push(ConfigGroup {
-            name,
-            len,
-            header_off: offset,
-        });
-        offset += 40;
-    }
-    Ok(groups)
-}
-
-fn write_gpio_subkey_header(buf: &mut [u8], pos: usize, name: &str, val_word_off: u32) {
-    let name_bytes = name.as_bytes();
-    let copy_len = name_bytes.len().min(31);
-    buf[pos..pos + copy_len].copy_from_slice(&name_bytes[..copy_len]);
-    buf[pos + copy_len..pos + 32].fill(0);
-    buf[pos + 32..pos + 36].copy_from_slice(&val_word_off.to_le_bytes());
-    let type_info: u32 = (4 << 16) | 6;
-    buf[pos + 36..pos + 40].copy_from_slice(&type_info.to_le_bytes());
-}
-
-/// Populate an empty `[uart0]` group so `hal_uart` applies PE02/PE03 pinmux.
-pub fn patch_melis_config_uart0(data: &mut Vec<u8>) -> Result<(), String> {
-    const SUBKEY_SIZE: usize = 40;
-    const INSERT_SIZE: usize = SUBKEY_SIZE * 2;
-
-    let groups = parse_config_groups(data)?;
-    let uart0 = groups
-        .iter()
-        .find(|g| g.name == "uart0")
-        .ok_or("uart0 group not found in melis-config.bin")?;
-    if uart0.len >= 2 {
-        return Ok(());
-    }
-
-    let tx_val_word = {
-        let idx = data
-            .windows(b"uart_debug_tx".len())
-            .position(|w| w == b"uart_debug_tx")
-            .ok_or("uart_debug_tx not found in melis-config.bin")?;
-        u32::from_le_bytes(data[idx + 32..idx + 36].try_into().unwrap())
-    };
-    let rx_val_word = {
-        let idx = data
-            .windows(b"uart_debug_rx".len())
-            .position(|w| w == b"uart_debug_rx")
-            .ok_or("uart_debug_rx not found in melis-config.bin")?;
-        u32::from_le_bytes(data[idx + 32..idx + 36].try_into().unwrap())
-    };
-
-    let insert_at = data
-        .len()
-        .checked_sub(INSERT_SIZE)
-        .ok_or("melis-config.bin too small for uart0 subkeys")?;
-    if data[insert_at..insert_at + INSERT_SIZE]
-        .iter()
-        .any(|b| *b != 0)
-    {
-        return Err(
-            "No trailing padding in melis-config.bin for uart0 subkeys; cannot patch in-place"
-                .to_string(),
-        );
-    }
-
-    write_gpio_subkey_header(data, insert_at, "uart_tx", tx_val_word);
-    write_gpio_subkey_header(data, insert_at + SUBKEY_SIZE, "uart_rx", rx_val_word);
-
-    let word_off = (insert_at / 4) as u32;
-    data[uart0.header_off + 32..uart0.header_off + 36].copy_from_slice(&2u32.to_le_bytes());
-    data[uart0.header_off + 36..uart0.header_off + 40].copy_from_slice(&word_off.to_le_bytes());
-
-    Ok(())
-}
-
-/// Apply UART-related changes from sys_config.fex to melis-config.bin.
-pub fn apply_sys_config_fex_patches(
-    fex_path: impl AsRef<Path>,
-    config_path: impl AsRef<Path>,
-) -> Result<(), String> {
-    let fex = std::fs::read_to_string(fex_path.as_ref())
-        .map_err(|e| format!("Failed to read sys_config.fex: {}", e))?;
-
-    let mut baudrate = None;
-    let mut rx_mux = None;
-    let mut wants_uart0 = false;
-    let mut in_uart0 = false;
-    for line in fex.lines() {
-        let line = line.split(';').next().unwrap_or(line).trim();
-        if line.starts_with('[') && line.ends_with(']') {
-            in_uart0 = line == "[uart0]";
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim();
-            let value = value.trim();
-            if key == "uart_debug_baudrate" {
-                baudrate = Some(parse_fex_int(value)?);
-            } else if key == "uart_debug_rx" {
-                rx_mux = Some(parse_gpio_mux(value)?);
-            } else if in_uart0 && (key == "uart_tx" || key == "uart_rx") {
-                wants_uart0 = true;
-            }
-        }
-    }
-
-    let baudrate = baudrate.ok_or("uart_debug_baudrate not found in sys_config.fex")?;
-    let rx_mux = rx_mux.ok_or("uart_debug_rx not found in sys_config.fex")?;
-
-    let mut config = std::fs::read(config_path.as_ref())
-        .map_err(|e| format!("Failed to read melis-config.bin: {}", e))?;
-    patch_melis_config_uart(&mut config, baudrate, rx_mux)?;
-    if wants_uart0 {
-        let mut config_vec = config;
-        patch_melis_config_uart0(&mut config_vec)?;
-        config = config_vec;
-    }
-    std::fs::write(config_path.as_ref(), &config)
-        .map_err(|e| format!("Failed to write melis-config.bin: {}", e))?;
-    Ok(())
-}
-
-/// Apply UART debug changes described in a decompiled sys_config.fex file.
-pub fn apply_sys_config_fex_uart_patches(
-    fex_path: impl AsRef<Path>,
-    config_path: impl AsRef<Path>,
-) -> Result<(), String> {
-    apply_sys_config_fex_patches(fex_path, config_path)
-}
-
-fn parse_fex_int(value: &str) -> Result<i32, String> {
-    if let Some(hex) = value
-        .strip_prefix("0x")
-        .or_else(|| value.strip_prefix("0X"))
-    {
-        i32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex integer {}: {}", value, e))
-    } else {
-        value
-            .parse::<i32>()
-            .map_err(|e| format!("Invalid integer {}: {}", value, e))
-    }
-}
-
-fn parse_gpio_mux(value: &str) -> Result<i32, String> {
-    let start = value
-        .find('<')
-        .ok_or_else(|| format!("Invalid GPIO value: {}", value))?;
-    let end = value[start + 1..]
-        .find('>')
-        .ok_or_else(|| format!("Invalid GPIO value: {}", value))?;
-    let mux = &value[start + 1..start + 1 + end];
-    if mux == "default" {
-        Ok(-1)
-    } else {
-        mux.parse::<i32>()
-            .map_err(|e| format!("Invalid GPIO mux in {}: {}", value, e))
-    }
 }
 
 fn read_toc1_items(data: &[u8]) -> Result<(Toc1MainInfo, Vec<Toc1ItemInfo>), String> {
@@ -478,6 +269,11 @@ pub fn decompile_sys_config(data: &[u8]) -> Result<String, String> {
                     fmt(drv),
                     fmt(data_val)
                 ));
+            } else if val_type == 5 {
+                // DATA_EMPTY: `key =` with nothing after it. Emit it back
+                // the same way, so recompiling with fex_compiler produces
+                // the same DATA_EMPTY entry instead of a bogus string.
+                out.push_str(&format!("{} =\n", sub_name));
             } else {
                 let mut words = Vec::new();
                 for w in 0..word_len {

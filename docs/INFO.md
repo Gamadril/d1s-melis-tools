@@ -105,7 +105,7 @@ Extracted from the first 1024 bytes of `gpt.bin` before numbered GPT partitions 
 1.  Extract the firmware using `dump_tool extract`.
 2.  Open `sys_config.fex` inside `1_bootA.bin.out/`.
 3.  Modify hardware parameters (e.g. enabling debugging consoles, swapping functional GPIO pins).
-4.  *(Note: Pack tools will compile `.fex` back to binary automatically).*
+4.  `dump_tool pack` does **not** compile `sys_config.fex` back into `melis-config.bin` on its own — the `.fex` file is a human-readable reference copy only, and packing never silently rewrites your compiled config. To apply edits you made in `sys_config.fex`, recompile it explicitly: see [Extra: Manually Recompiling sys_config.fex](#extra-manually-recompiling-sys_configfex) below.
 
 ### Patching the OS Kernel & Modules
 In theory patching the kernel should be possible, but since it's a big binary blob not very practical.
@@ -124,6 +124,30 @@ D1s is based on T-Head Xuantie C906 core. There is some effort to support T-Head
     *   Repacks the `3_UDISK.bin.out/` back into FAT16.
     *   Splices the repacked partition binaries back into the GPT image (`gpt.bin`) at their original offsets.
     *   Prepends `boot0.bin` to build the full flash image ready for writing.
+
+---
+
+## Extra: Manually Recompiling sys_config.fex
+
+`dump_tool pack` never touches `melis-config.bin` on its own. Editing `sys_config.fex` and packing does nothing to that edit unless you recompile it back into binary first — that's a deliberate, separate step, not something packing does implicitly.
+
+`melis-boot` includes a full port of Allwinner's `sys_config.fex` compiler (`melis-boot/src/fex_compiler.rs`) — it recompiles the *entire* file (integers, strings, GPIO pin specs, empty values), not just a hand-picked subset of keys, so any hardware parameter you change in `sys_config.fex` — UART settings, GPIO pin muxing, enabling a debug console, anything else the file describes — carries through. It's been validated to reproduce a real device's `melis-config.bin` byte-for-byte from its own decompiled `sys_config.fex`.
+
+To use it:
+
+1.  Extract the firmware: `dump_tool extract dump.bin out_dir`.
+2.  Edit `out_dir/gpt.bin.out/1_bootA.bin.out/sys_config.fex` however you need.
+3.  Build the compiler once:
+    ```bash
+    cargo build -p melis-boot --release --example compile_fex
+    ```
+4.  Recompile it (this **overwrites** `melis-config.bin` — keep a backup, there's no undo):
+    ```bash
+    ./target/release/examples/compile_fex \
+      out_dir/gpt.bin.out/1_bootA.bin.out/sys_config.fex \
+      out_dir/gpt.bin.out/1_bootA.bin.out/melis-config.bin
+    ```
+5.  Pack as normal: `dump_tool pack out_dir dump.repacked.bin`. It picks up the `melis-config.bin` you just recompiled; nothing else about pack (partition offsets/sizes, ROOTFS/UDISK repacking) is affected by this step.
 
 ---
 

@@ -3,7 +3,7 @@ use dump::unpack_dump;
 use std::fs::File;
 use std::path::PathBuf;
 
-use gpt::extract_partitions;
+use gpt::{extract_partitions, find_partition, read_partition_table};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -134,6 +134,28 @@ fn main() -> Result<(), String> {
         let input_dir = &args.input;
         let output_file = &args.output;
 
+        // 0. Read this device's *own* GPT (from the gpt.bin produced by a
+        // prior extract) to find out where bootA/ROOTFS/UDISK actually
+        // live and how big they actually are. Partition layout varies by
+        // device (bootA/ROOTFS/UDISK size and offset are not the same
+        // across boards), so nothing downstream may assume fixed values
+        // here - it always has to come from this device's own table.
+        let mut gpt_path = PathBuf::from(input_dir);
+        gpt_path.push("gpt.bin");
+        let gpt_layout = read_partition_table(&gpt_path)?;
+        let boota_part = find_partition(&gpt_layout, "bootA")?.clone();
+        let rootfs_part = find_partition(&gpt_layout, "ROOTFS")?.clone();
+        let udisk_part = find_partition(&gpt_layout, "UDISK")?.clone();
+        if args.verbose {
+            println!("  Layout read from {}:", gpt_path.display());
+            for p in &gpt_layout {
+                println!(
+                    "    {:<10} offset=0x{:08X} size=0x{:08X} ({} bytes)",
+                    p.name, p.offset, p.size, p.size
+                );
+            }
+        }
+
         // 1. Path to extracted rootfs directory
         let mut rootfs_dir = PathBuf::from(input_dir);
         rootfs_dir.push("gpt.bin.out");
@@ -162,7 +184,7 @@ fn main() -> Result<(), String> {
         let mut udisk_repacked = PathBuf::from(input_dir);
         udisk_repacked.push("gpt.bin.out");
         udisk_repacked.push("3_UDISK.bin.repacked");
-        let udisk_partition_size = 917504usize;
+        let udisk_partition_size = udisk_part.size as usize;
         if args.verbose {
             println!("  Packing UDISK directory: {}", udisk_dir.display());
         } else {
@@ -186,16 +208,11 @@ fn main() -> Result<(), String> {
         boot_repacked.push("gpt.bin.out");
         boot_repacked.push("1_bootA.bin.repacked");
 
-        let fex_path = boot_out_dir.join("sys_config.fex");
+        // UART debug settings (baudrate/pin mux) in melis-config.bin are
+        // left exactly as extracted here. Syncing them from sys_config.fex
+        // is board-specific and not pack's job - see INFO.md, "Manually
+        // syncing UART debug settings" for how to do it deliberately.
         let config_path = boot_out_dir.join("melis-config.bin");
-        if fex_path.exists() {
-            if args.verbose {
-                println!("    Applying sys_config.fex UART patches to melis-config.bin");
-            } else {
-                println!("Applying sys_config.fex UART patches to melis-config.bin");
-            }
-            melis_boot::apply_sys_config_fex_patches(&fex_path, &config_path)?;
-        }
         if args.verbose {
             println!("  Repacking bootA package");
         } else {
@@ -212,9 +229,8 @@ fn main() -> Result<(), String> {
         let boot0_data =
             std::fs::read(&boot0_path).map_err(|e| format!("Error reading boot0.bin: {}", e))?;
 
-        // 7. Read original gpt.bin to modify it
-        let mut gpt_path = PathBuf::from(input_dir);
-        gpt_path.push("gpt.bin");
+        // 7. Read original gpt.bin to modify it (gpt_path/gpt_layout were
+        // already resolved from this device's own GPT in step 0)
         if args.verbose {
             println!("  Reading GPT image");
         }
@@ -229,9 +245,10 @@ fn main() -> Result<(), String> {
         let repacked_udisk_data = std::fs::read(&udisk_repacked)
             .map_err(|e| format!("Error reading repacked UDISK: {}", e))?;
 
-        // 10. Splice bootA
-        let boota_offset = 0x4000usize;
-        let boota_size = 1179648usize;
+        // 10. Splice bootA (offset/size come from this device's own GPT,
+        // read in step 0 - never assumed)
+        let boota_offset = boota_part.offset as usize;
+        let boota_size = boota_part.size as usize;
         let repacked_boota_data = std::fs::read(&boot_repacked)
             .map_err(|e| format!("Error reading repacked bootA: {}", e))?;
         if repacked_boota_data.len() > boota_size {
@@ -259,9 +276,9 @@ fn main() -> Result<(), String> {
             }
         }
 
-        // 11. Splice ROOTFS
-        let rootfs_offset = 1196032usize;
-        let rootfs_size = 14614528usize;
+        // 11. Splice ROOTFS (offset/size from this device's own GPT)
+        let rootfs_offset = rootfs_part.offset as usize;
+        let rootfs_size = rootfs_part.size as usize;
 
         if repacked_rootfs_data.len() > rootfs_size {
             return Err(format!(
@@ -290,9 +307,9 @@ fn main() -> Result<(), String> {
             }
         }
 
-        // 12. Splicing UDISK
-        let udisk_offset = 15810560usize;
-        let udisk_size = 917504usize;
+        // 12. Splicing UDISK (offset/size from this device's own GPT)
+        let udisk_offset = udisk_part.offset as usize;
+        let udisk_size = udisk_part.size as usize;
 
         if repacked_udisk_data.len() > udisk_size {
             return Err(format!(
