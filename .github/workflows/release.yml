@@ -74,7 +74,7 @@ jobs:
           path: sd_fel_switcher
 
       - name: Build host tools
-        run: cargo build --release -p dump_tool -p data_renderer -p xfel_spi_nor --features xfel_spi_nor/vendored
+        run: cargo build --release -p dump_tool -p data_renderer -p melis-boot -p xfel_spi_nor --features xfel_spi_nor/vendored
 
       - name: Package (Linux / macOS)
         if: matrix.archive == 'tar.gz'
@@ -86,6 +86,7 @@ jobs:
           chmod +x "${PKG}"/*.sh
           cp target/release/dump_tool "${PKG}/bin/"
           cp target/release/data_renderer "${PKG}/bin/"
+          cp target/release/compile_fex "${PKG}/bin/"
           cp target/release/xfel_spi_nor "${PKG}/bin/"
           cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
           tar -C dist -czf "dist/melis-tools-${{ matrix.slug }}.tar.gz" "melis-tools-${{ matrix.slug }}"
@@ -100,6 +101,7 @@ jobs:
           cp toolbox/*.ps1 "${PKG}/"
           cp target/release/dump_tool.exe "${PKG}/bin/"
           cp target/release/data_renderer.exe "${PKG}/bin/"
+          cp target/release/compile_fex.exe "${PKG}/bin/"
           cp target/release/xfel_spi_nor.exe "${PKG}/bin/"
           cp sd_fel_switcher/sd_fel_switcher.bin "${PKG}/sd_fel_switcher/"
           powershell -NoProfile -Command "Compress-Archive -Path 'dist/melis-tools-${{ matrix.slug }}' -DestinationPath 'dist/melis-tools-${{ matrix.slug }}.zip' -Force"

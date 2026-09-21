@@ -119,23 +119,19 @@ In theory this should be possible, but the kernel is one big binary blob, so it'
 
 `dump_tool pack` never touches `melis-config.bin` on its own. Editing `sys_config.fex` and packing does nothing with that edit unless you recompile it back into binary first — that's deliberately a separate step, not something packing does implicitly behind your back.
 
-`melis-boot` includes a full Rust port of Allwinner's `sys_config.fex` compiler (`melis-boot/src/fex_compiler.rs`). It recompiles the *entire* file — integers, strings, GPIO pin specs, empty values — not just a hand-picked subset of keys, so any hardware parameter you change carries through: UART settings, GPIO muxing, debug consoles, anything else the file describes. It's been checked against a real device dump: recompiling that dump's own decompiled `sys_config.fex` reproduces its `melis-config.bin` byte-for-byte.
+The release archives ship a `compile_fex` binary alongside `dump_tool` and `data_renderer` in `bin/`. It's a full Rust port of Allwinner's `sys_config.fex` compiler (source: `melis-boot/src/fex_compiler.rs`, built as `melis-boot/src/bin/compile_fex.rs`). It recompiles the *entire* file — integers, strings, GPIO pin specs, empty values — not just a hand-picked subset of keys, so any hardware parameter you change carries through: UART settings, GPIO muxing, debug consoles, anything else the file describes. It's been checked against a real device dump: recompiling that dump's own decompiled `sys_config.fex` reproduces its `melis-config.bin` byte-for-byte.
 
 To use it:
 
 1.  Extract the firmware: `dump_tool extract dump.bin out_dir`.
 2.  Edit `out_dir/gpt.bin.out/1_bootA.bin.out/sys_config.fex` however you need.
-3.  Build the compiler once:
+3.  Recompile it (this **overwrites** `melis-config.bin` — keep a backup, there's no undo):
     ```bash
-    cargo build -p melis-boot --release --example compile_fex
-    ```
-4.  Recompile it (this **overwrites** `melis-config.bin` — keep a backup, there's no undo):
-    ```bash
-    ./target/release/examples/compile_fex \
+    ./bin/compile_fex \
       out_dir/gpt.bin.out/1_bootA.bin.out/sys_config.fex \
       out_dir/gpt.bin.out/1_bootA.bin.out/melis-config.bin
     ```
-5.  Pack as normal: `dump_tool pack out_dir dump.repacked.bin`. It picks up the `melis-config.bin` you just recompiled; nothing else about pack (partition offsets/sizes, ROOTFS/UDISK repacking) is affected by this step.
+4.  Pack as normal: `dump_tool pack out_dir dump.repacked.bin`. It picks up the `melis-config.bin` you just recompiled; nothing else about pack (partition offsets/sizes, ROOTFS/UDISK repacking) is affected by this step.
 
 ---
 

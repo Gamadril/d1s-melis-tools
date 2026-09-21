@@ -1,7 +1,11 @@
 //! Compile a sys_config.fex text file into its binary form.
 //!
 //! Usage:
-//!   cargo run -p melis-boot --example compile_fex -- <sys_config.fex> <out.bin>
+//!   compile_fex <sys_config.fex> <out.bin>
+//!
+//! Ships as a standalone binary in the release archives (bin/compile_fex),
+//! same as dump_tool and data_renderer. During development you can also
+//! run it via `cargo run -p melis-boot --bin compile_fex -- <fex> <out.bin>`.
 
 use std::env;
 use std::fs;

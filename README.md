@@ -15,8 +15,8 @@ Get the latest Release Build for your platform to start.
 
 ## Tools
 
-Day-to-day binaries: **`dump_tool`** (firmware) and **`data_renderer`** (`.data` UI).
-The other crates (`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`, `melis-data`) are internal libraries.
+Day-to-day binaries: **`dump_tool`** (firmware), **`data_renderer`** (`.data` UI), and **`compile_fex`** (recompile an edited `sys_config.fex`).
+`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`, and `melis-data` are internal libraries — not standalone tools themselves, though `melis-boot` is where `compile_fex` lives as a binary target.
 
 You can use the compiled executables directly...
 ```bash
@@ -69,18 +69,20 @@ gpt.bin.out/
 3. **bootA** — TOC1 / `sunxi-package`: `melis-lzma` + `melis-config`
 4. Kernel loads **epos.img**, mounts **D:** ROOTFS, **E:** UDISK, **F:** SDCARD, starts desktop
 
-Sub-crate roles (internal only):
+Sub-crate roles:
 
 | Crate        | Role                                                |
 |--------------|-----------------------------------------------------|
 | `dump`       | Raw NOR dump header                                 |
 | `gpt`        | Partition extract/splice                            |
-| `melis-boot` | bootA TOC1 pack/unpack, LZMA extract, `sys_config` decompile/compile |
+| `melis-boot` | bootA TOC1 pack/unpack, LZMA extract, `sys_config` decompile/compile (also home of the `compile_fex` binary) |
 | `minfs`      | ROOTFS pack/unpack                                  |
 | `udisk`      | UDISK FAT16 pack/unpack                             |
 | `image`      | eGON / CHK headers                                  |
 
 ## Release Bundle
+
+Each archive's `bin/` directory contains `dump_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
 
 | Platform | Archive |
 |----------|---------|
