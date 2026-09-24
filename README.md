@@ -15,8 +15,8 @@ Get the latest Release Build for your platform to start.
 
 ## Tools
 
-Day-to-day binaries: **`dump_tool`** (firmware), **`data_renderer`** (`.data` UI), and **`compile_fex`** (recompile an edited `sys_config.fex`).
-`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`, and `melis-data` are internal libraries — not standalone tools themselves, though `melis-boot` is where `compile_fex` lives as a binary target.
+Day-to-day binaries: **`dump_tool`** (firmware), **`img_tool`** (Allwinner `IMAGEWTY` `.img` firmware update images), **`data_renderer`** (`.data` UI), and **`compile_fex`** (recompile an edited `sys_config.fex`).
+`melis-boot`, `minfs`, `gpt`, `udisk`, `image`, `dump`, and `melis-data` are internal libraries — not standalone tools themselves, though `melis-boot` is where `compile_fex` lives as a binary target, and `image` is what `img_tool` is built on.
 
 You can use the compiled executables directly...
 ```bash
@@ -28,6 +28,14 @@ You can use the compiled executables directly...
 # melis-config.bin first (see docs/INFO.md, "Extra: Manually Recompiling
 # sys_config.fex") if you changed it.
 ./dump_tool pack out_dir dump.repacked.bin
+```
+
+```bash
+# Extract an Allwinner IMAGEWTY (.img) firmware update image → items + image.cfg
+./img_tool extract firmware.img out_dir
+
+# Repack a previously extracted (and optionally edited) directory back to .img
+./img_tool pack out_dir firmware.repacked.img
 ```
 
 ... or included helper scripts
@@ -78,11 +86,11 @@ Sub-crate roles:
 | `melis-boot` | bootA TOC1 pack/unpack, LZMA extract, `sys_config` decompile/compile (also home of the `compile_fex` binary) |
 | `minfs`      | ROOTFS pack/unpack                                  |
 | `udisk`      | UDISK FAT16 pack/unpack                             |
-| `image`      | eGON / CHK headers                                  |
+| `image`      | Allwinner `IMAGEWTY` `.img` pack/unpack — backs the `img_tool` binary |
 
 ## Release Bundle
 
-Each archive's `bin/` directory contains `dump_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
+Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
 
 | Platform | Archive |
 |----------|---------|

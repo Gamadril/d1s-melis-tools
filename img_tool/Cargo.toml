@@ -1,0 +1,10 @@
+[package]
+name = "img_tool"
+version = "0.1.0"
+edition = "2021"
+description = "CLI to extract and repack Allwinner IMAGEWTY (.img) firmware update images"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+image = { path = "../image" }

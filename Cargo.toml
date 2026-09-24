@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "dump_tool",
+    "img_tool",
     "minfs",
     "image",
     "gpt",
