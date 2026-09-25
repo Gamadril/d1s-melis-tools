@@ -7,7 +7,9 @@ use std::{
 use binrw::{io::BufReader, BinRead};
 use structs::*;
 
+pub mod firmware;
 pub mod structs;
+pub use firmware::{extract_firmware, pack_firmware, write_dump_file, PackedDump};
 
 pub fn unpack_dump(dump_path: impl AsRef<Path>, dest_path: impl AsRef<Path>) -> Result<(), String> {
     if std::fs::exists(&dest_path).unwrap() {

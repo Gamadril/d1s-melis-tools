@@ -163,8 +163,41 @@ The **Settings → Factory settings** entry asks for a 6-digit code. Each code o
 | `001106` | Factory settings (extended) | Hardcoded; menu id 25, a separate code path from `113266` |
 | `230762` | Interface selection | Hardcoded; UI style/layout picker (`uiType`/`uiID` area) |
 | `123579` | Self-check | Hardcoded; minimal UI, can look empty |
+| `000000` | Firmware update | Hardcoded → `SetupUpdate.data` (see below) |
 
 There are other digit strings in `init.axf` (WiFi defaults, version blobs, etc.), but they aren't wired into this login dispatcher.
+
+### SD / USB firmware update (`.img`)
+
+**IMAGEWTY app image** (what `img_tool` produces):
+
+```text
+{drive}\Update\{appUpdateFile}
+```
+
+| Piece | Default (HZ-B500 `init.axf`) |
+| :--- | :--- |
+| Drive on insert | whatever Melis just mounted (`CarApp_DiskIn` — SD `type==0`, USB `type==1`) |
+| Drive from settings | hardcoded `F:` |
+| Filename | `LTTF133.img` (`[CONFIG] appUpdateFile` in UDISK `Config.ini`) |
+
+Practical: FAT32 SD, **`Update\LTTF133.img`**. Insert the card (auto) or factory PIN **`000000`** / settings key that calls the same start function.
+
+Sequence in `init.axf`: `file_exists` → install `d:\mod\update.mod` → ioctl **7** (`CarApi_CheckImage`) → UI `SetupUpdateApp` → thread → ioctl **2** with the full path → poll ioctl **4** until progress `100` → `esKSRV_Reset()`. Failed check → `SetupUpdateFail`.
+
+**Same insert scan, other payloads** (not IMAGEWTY):
+
+| Path | UI |
+| :--- | :--- |
+| `{drive}\Update\{mcuUpdateFile}` default `LTTMcu.bin` | `SetupUpdateMcu` |
+| `{drive}\Update\BtHeadset.bin` | `SetupUpdateBtHeadset` |
+| `{drive}\{mcu file}` at volume root | `SetupUpdate` |
+
+Also looked at under `\Update\`: `Config.ini`, `stalogo.jpg`, a file named `E` (copied onto UDISK if present).
+
+To flash a dump-derived image: `img_tool from-dump dump_out_dir` writes **`LTTF133.img`** by default — copy it to **`/Update/`** on the card.
+
+`update.mod` erases SPI NOR with the raw item length and then the unused tail of the GPT partition. The spinor driver requires those lengths to be **4 KiB** aligned (`nor_erase: erase size 4k is not align to …`). Unaligned MinFS/TOC1 payloads make the last erase fail, the ROOTFS `add_sum` verify mismatches, and the burn retries forever while the UI timer keeps running. `img_tool pack` / `from-dump` pad bootA and ROOTFS items with `0xFF` to 4 KiB (and keep `V*.fex` in sync).
 
 ---
 

@@ -8,3 +8,7 @@ publish = false
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 image = { path = "../image" }
+dump = { path = "../dump" }
+gpt = { path = "../gpt" }
+minfs = { path = "../minfs" }
+melis-boot = { path = "../melis-boot" }

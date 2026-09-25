@@ -7,3 +7,7 @@ publish = false
 
 [dependencies]
 binrw = { workspace = true }
+gpt = { path = "../gpt" }
+minfs = { path = "../minfs" }
+udisk = { path = "../udisk" }
+melis-boot = { path = "../melis-boot" }

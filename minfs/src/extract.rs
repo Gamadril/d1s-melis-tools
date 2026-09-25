@@ -59,8 +59,14 @@ pub(crate) fn extract_fs(
         .map_err(|e| format!("Error creating output directory: {}", e))?;
 
     extract_dir(&root_entry, &out_dir, &mut reader)?;
+    println!();
 
     Ok(())
+}
+
+fn progress_dot() {
+    print!(".");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
 }
 
 fn extract_file(
@@ -221,13 +227,7 @@ fn extract_file(
                 let sec_buffer = &buffer[start..end];
                 let mut sec_reader = Cursor::new(sec_buffer);
                 let probs = LzmaProbs::read_le(&mut sec_reader).unwrap();
-                let b = sec_buffer[5];
-                let code_bytes = &sec_buffer[6..10];
-                let code = u32::from_be_bytes(code_bytes.try_into().unwrap());
-                println!(
-                    "File {}, Section {:?}: b={:02X}, code={:08X}",
-                    name, mfs_sec.section_type, b, code
-                );
+                progress_dot();
 
                 let mut lzma_reader = LzmaReader::new_with_props(
                     sec_reader,
@@ -314,10 +314,7 @@ fn extract_file(
             .map_err(|e: std::io::Error| format!("Error writing to file {}: {}", &name, e))?;
     } else if dir_entry.attribute & MINFS_ATTR_COMPRESS == MINFS_ATTR_COMPRESS {
         let mut out: Vec<u8> = Vec::with_capacity(dir_entry.unpack_size as usize);
-        let b = buffer[5];
-        let code_bytes = &buffer[6..10];
-        let code = u32::from_be_bytes(code_bytes.try_into().unwrap());
-        println!("File {} (compressed): b={:02X}, code={:08X}", name, b, code);
+        progress_dot();
 
         let mut sec_reader = Cursor::new(buffer);
         let probs = LzmaProbs::read_le(&mut sec_reader).unwrap();

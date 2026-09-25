@@ -513,7 +513,6 @@ pub fn extract(boot_path: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Resul
                         decompressed.len() as f64 / payload.len() as f64
                     );
 
-                    // Save with .decompressed extension
                     let decomp_filename = format!("{}.decompressed", name);
                     let decomp_path = dest_dir.join(&decomp_filename);
                     let mut decomp_file = File::create(&decomp_path).map_err(|e| {
@@ -529,7 +528,6 @@ pub fn extract(boot_path: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Resul
                         )
                     })?;
 
-                    // Also save as epos.img for better naming
                     if name.contains("melis") {
                         let epos_path = dest_dir.join("epos.img");
                         let mut epos_file = File::create(&epos_path)
@@ -539,7 +537,6 @@ pub fn extract(boot_path: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Resul
                             .map_err(|e| format!("Failed to write epos.img: {}", e))?;
                         println!("  Saved as: epos.img");
 
-                        // Analyze kernel header
                         analyze_kernel(&decompressed);
                     }
                 }

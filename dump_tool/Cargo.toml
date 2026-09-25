@@ -7,10 +7,4 @@ publish = false
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-binrw = { workspace = true }
 dump = { path = "../dump" }
-gpt = { path = "../gpt" }
-minfs = { path = "../minfs" }
-image = { path = "../image" }
-udisk = { path = "../udisk" }
-melis-boot = { path = "../melis-boot" }

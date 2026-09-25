@@ -974,20 +974,18 @@ name = "dump"
 version = "0.1.0"
 dependencies = [
  "binrw",
+ "gpt",
+ "melis-boot",
+ "minfs",
+ "udisk",
 ]
 
 [[package]]
 name = "dump_tool"
 version = "0.1.0"
 dependencies = [
- "binrw",
  "clap",
  "dump",
- "gpt",
- "image 0.1.0",
- "melis-boot",
- "minfs",
- "udisk",
 ]
 
 [[package]]
@@ -1790,7 +1788,11 @@ name = "img_tool"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "dump",
+ "gpt",
  "image 0.1.0",
+ "melis-boot",
+ "minfs",
 ]
 
 [[package]]

@@ -32,10 +32,16 @@ You can use the compiled executables directly...
 
 ```bash
 # Extract an Allwinner IMAGEWTY (.img) firmware update image → items + image.cfg
+# plus nested bootA (TOC1) and ROOTFS (MinFS) into <item>.out/ (same idea as dump_tool)
 ./img_tool extract firmware.img out_dir
 
 # Repack a previously extracted (and optionally edited) directory back to .img
-./img_tool pack out_dir firmware.repacked.img
+# Nested <item>.out/ trees are packed first; V*.fex verify checksums are refreshed.
+# Output defaults to LTTF133.img (HZ-B500 SD/USB name).
+./img_tool pack out_dir [LTTF133.img]
+
+# Build a .img from a dump_tool extract tree (boot0 + GPT + bootA + ROOTFS)
+./img_tool from-dump dump_out_dir [LTTF133.img]
 ```
 
 ... or included helper scripts
@@ -70,6 +76,11 @@ gpt.bin.out/
 
 `0_ppt.bin` is extracted for inspection only. `dump_tool pack` keeps the original `gpt.bin` header region and does not read `0_ppt.bin`. See [docs/INFO.md](docs/INFO.md) for layout details.
 
+**`img_tool extract`** writes the flat IMAGEWTY items plus `image.cfg`. Any item that is TOC1 (`bootA`) or MinFS (`ROOTFS`) is also unpacked.
+
+**`img_tool from-dump`** takes a dump extract (`boot0.bin` + `gpt.bin`), splices edited ROOTFS/UDISK/bootA like `dump_tool pack`, then wraps them as 'IMAGEWTY' image.
+
+
 ## Boot Chain
 
 1. **boot0.bin** (~49 KiB, SPI NOR) — first stage
@@ -102,7 +113,7 @@ Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `data_renderer
 
 See the following documentation files for detailed technical information:
 
-* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, `.data` UI format, device-specific 
+* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, SD/USB `.img` update, `.data` UI format, device-specific 
 * [docs/PIN_MAPPING.md](docs/PIN_MAPPING.md) — F133 GPIO / mux reference
 
 ## `.data` UI tools
