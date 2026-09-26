@@ -33,6 +33,39 @@ fn resolve<'a>(objects: &'a [UiObject], path: &[usize]) -> Option<&'a UiObject> 
     }
 }
 
+fn type_name(serialized_type: u32) -> &'static str {
+    match serialized_type {
+        0 => "Text",
+        1 => "Button",
+        2 => "Slider",
+        3 => "Grid/List",
+        4 => "Image",
+        5 => "View/Layer",
+        _ => "Unknown",
+    }
+}
+
+/// Convert an ObjectPath whose bounds are parent-relative into absolute
+/// scene coordinates.
+fn absolute_bounds(objects: &[UiObject], path: &[usize]) -> Option<(u32, u32, u32, u32)> {
+    let (first, rest) = path.split_first()?;
+    let mut object = objects.get(*first)?;
+    let mut bounds = object.bounds?;
+
+    let mut x = bounds.x;
+    let mut y = bounds.y;
+
+    for index in rest {
+        object = object.children.get(*index)?;
+        bounds = object.bounds?;
+
+        x = x.checked_add(bounds.x)?;
+        y = y.checked_add(bounds.y)?;
+    }
+
+    Some((x, y, bounds.width, bounds.height))
+}
+
 /// An edit produced while drawing the (immutably borrowed) tree/inspector,
 /// applied to the byte buffer afterwards to keep the borrow checker happy.
 enum Edit {
@@ -225,7 +258,35 @@ impl eframe::App for EditorApp {
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
             if let Some(layer) = &self.layer {
                 let size = layer.screen_size();
+
+                // paint_canvas renders the scene starting at the central
+                // panel's current UI origin. Keep that origin so the
+                // selected object's scene-space bounds can be mapped onto
+                // the rendered canvas.
+                let canvas_origin = ui.min_rect().min;
+
                 paint_canvas(ui, layer, size);
+
+                if let Some(path) = &self.selected {
+                    if let Some((x, y, width, height)) =
+                        absolute_bounds(&layer.scene.objects, path)
+                    {
+                        let selection_rect = egui::Rect::from_min_size(
+                            canvas_origin + egui::vec2(x as f32, y as f32),
+                            egui::vec2(width as f32, height as f32),
+                        );
+
+                        ui.painter().rect_stroke(
+                            selection_rect.expand(1.0),
+                            0.0,
+                            egui::Stroke::new(
+                                2.0,
+                                egui::Color32::from_rgb(255, 190, 0),
+                            ),
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                }
             } else {
                 ui.centered_and_justified(|ui| ui.label("Open a .data file (Open… above)"));
             }
@@ -344,17 +405,17 @@ fn draw_tree(
     selected: &Option<ObjectPath>,
     new_selection: &mut Option<ObjectPath>,
 ) {
-    let label = format!(
-        "{}#{} type={}{}",
-        "  ".repeat(depth),
-        object.index,
-        object.serialized_type,
-        object
-            .name
-            .as_ref()
-            .map(|n| format!(" {n}"))
-            .unwrap_or_default()
-    );
+let label = format!(
+    "{}#{} {}{}",
+    "  ".repeat(depth),
+    object.index,
+    type_name(object.serialized_type),
+    object
+        .name
+        .as_ref()
+        .map(|n| format!(" {n}"))
+        .unwrap_or_default()
+);
     let is_selected = selected.as_ref() == Some(&path);
     if ui.selectable_label(is_selected, label).clicked() {
         *new_selection = Some(path.clone());
@@ -376,7 +437,11 @@ fn draw_inspector(
     text_scratch_for: &mut Option<ObjectPath>,
     edits: &mut Vec<Edit>,
 ) {
-    ui.label(format!("type: {}", object.serialized_type));
+    ui.label(format!(
+        "type: {} ({})",
+        type_name(object.serialized_type),
+        object.serialized_type
+    ));
     if let Some(name) = &object.name {
         ui.label(format!("name: {name}"));
     }
