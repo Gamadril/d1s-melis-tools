@@ -1,0 +1,15 @@
+[package]
+name = "data_editor"
+version = "0.1.0"
+edition = "2021"
+description = "Small IDE-like editor for Melis declarative UI .data files (fields, no drag&drop)"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+eframe = "0.36"
+egui = "0.36"
+image = { version = "0.25", default-features = false, features = ["bmp", "png"] }
+melis-data = { path = "../melis-data" }
+data_renderer = { path = "../data_renderer" }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }

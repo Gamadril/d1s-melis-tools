@@ -10,6 +10,7 @@ members = [
     "melis-boot",
     "melis-data",
     "data_renderer",
+    "data_editor",
     "xfel_spi_nor",
 ]
 exclude = ["sd_fel_switcher"]

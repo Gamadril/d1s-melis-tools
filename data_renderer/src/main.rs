@@ -1,9 +1,6 @@
-mod layer;
-mod surface;
-
 use clap::Parser;
+use data_renderer::layer::{paint_canvas, UiLayer};
 use eframe::egui::{self, Vec2};
-use layer::{paint_canvas, UiLayer};
 use melis_data::{load_language_dir, parse, utf16_text, DataFile, ResourceKind, UiObject};
 use std::{
     collections::HashMap,
