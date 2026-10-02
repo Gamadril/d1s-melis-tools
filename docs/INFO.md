@@ -273,7 +273,7 @@ Bidirectional communication (actually typing commands into FinSH, not just readi
 |------|------|--------|------|---------|
 | **UART0** (debug) | PE02 TX, PE03 RX | `[uart_para]` + `[uart0]` | 500000 8N1 | FinSH shell, `printk` logs, debug messages |
 | **UART4** (MCU) | PE04 TX, PE05 RX | `[uart4]`, `Config.ini` → `mcuSerialName=/dev/uart4` | 115200 8N1 | Front-panel MCU link — binary protocol (`02 80 …`), `CMcuCtrl` subsystem |
-| **UART1** | PG12/PG13 | `[uart1]` in fex | — | Unused on this firmware; pins conflict with disabled `daudio1` I2S; wired out to connector J6 |
+| **UART1** | PG12/PG13 | `[uart1]` in fex | — | Unused on this firmware; pins conflict with disabled `daudio1` I2S |
 
 ### Apple CarPlay authentication (MFi coprocessor)
 
