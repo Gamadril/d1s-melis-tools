@@ -240,16 +240,15 @@ fn parse_gpio(rest: &str) -> Result<Value, String> {
     }
 
     if tokens.is_empty() {
-        return Err(format!(
-            "GPIO value needs at least a mux token: {:?}",
-            rest
-        ));
+        return Err(format!("GPIO value needs at least a mux token: {:?}", rest));
     }
     while tokens.len() < 4 {
         tokens.push(-1);
     }
 
-    Ok(Value::Gpio([group, pin, tokens[0], tokens[1], tokens[2], tokens[3]]))
+    Ok(Value::Gpio([
+        group, pin, tokens[0], tokens[1], tokens[2], tokens[3],
+    ]))
 }
 
 /// Split `name = value` on the first `=`, trimming surrounding
@@ -340,7 +339,11 @@ pub fn compile_sys_config(fex_text: &str) -> Result<Vec<u8>, String> {
         let n = section.name.as_bytes();
         let len = n.len().min(ITEM_MAIN_NAME_MAX - 1);
         name_bytes[..len].copy_from_slice(&n[..len]);
-        item_table.push((name_bytes, section.subkeys.len() as u32, running_meta_offset));
+        item_table.push((
+            name_bytes,
+            section.subkeys.len() as u32,
+            running_meta_offset,
+        ));
 
         for subkey in &section.subkeys {
             let mut sub_name_bytes = [0u8; ITEM_MAIN_NAME_MAX];
@@ -359,8 +362,8 @@ pub fn compile_sys_config(fex_text: &str) -> Result<Vec<u8>, String> {
         running_meta_offset += 10 * section.subkeys.len() as u32;
     }
 
-    let original_len = header_words * 4 + item_table_words * 4 + meta_words * 4
-        + (data_bytes.len() as u32);
+    let original_len =
+        header_words * 4 + item_table_words * 4 + meta_words * 4 + (data_bytes.len() as u32);
     let length = round_to_1024(original_len);
 
     let mut out = Vec::with_capacity(length as usize);

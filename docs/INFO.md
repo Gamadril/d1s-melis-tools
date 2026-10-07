@@ -80,6 +80,7 @@ A few things worth knowing about this block:
 *   **`melis-config.bin.out/sys_config.fex`** — the decompiled config: GPIO pins, interface modes, system parameters.
 *   **`melis-lzma.bin`** — the raw, still-compressed kernel package.
 *   **`melis-lzma.decompressed`** — the decompressed kernel image, starting with the OpenSBI wrapper described above.
+*   **`epos.img`** — an editable copy of the decompressed kernel image. Packing compares it with `melis-lzma.decompressed` and recompresses it only if the bytes differ. The new LZMA stream must fit the original TOC1 kernel slot.
 
 ### `2_ROOTFS.bin.out/` (MinFS filesystem output)
 
@@ -102,7 +103,7 @@ User-space storage — resources, config scripts, logs, secondary assets. Extrac
 
 ### Patching the OS kernel & modules
 
-In theory this should be possible, but the kernel is one big binary blob, so it's not very practical in practice. It's probably easier to work from the Melis kernel source instead — it acts as the HAL, while the interesting stuff (Android Auto, CarPlay) lives in the UI/ROOTFS modules. Ghidra can help with analyzing the decompressed kernel. D1s is built on the T-Head Xuantie C906 core; there's ongoing work to support T-Head extensions in Ghidra ([Issue #5778](https://github.com/NationalSecurityAgency/ghidra/pull/5778)).
+Edit `1_bootA.bin.out/epos.img` to patch the decompressed kernel, then run `dump_tool pack` or `img_tool from-dump` on a dump extract. For an IMAGEWTY extract, edit the bootA item's `epos.img` and run `img_tool pack`. The packer compares it with `melis-lzma.decompressed`, rebuilds the `melis-lzma` TOC1 item when it changed, and refreshes the TOC1 checksum. It reports an error if the compressed result exceeds the original kernel slot. Editing `melis-lzma.bin` directly does not update the boot package. The kernel is one large binary blob, so patching it is still less practical than changing ROOTFS modules. Ghidra can help with analyzing the decompressed kernel. D1s is built on the T-Head Xuantie C906 core; there's ongoing work to support T-Head extensions in Ghidra ([Issue #5778](https://github.com/NationalSecurityAgency/ghidra/pull/5778)).
 
 ### Repacking the system filesystem
 

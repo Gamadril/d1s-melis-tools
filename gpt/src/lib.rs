@@ -41,8 +41,8 @@ pub fn read_partition_table(source_path: impl AsRef<Path>) -> Result<Vec<Partiti
     reader
         .seek(io::SeekFrom::Start(LBA_SIZE))
         .map_err(|e| format!("Error seeking in input file: {}", e))?;
-    let gpt_head = GPTHeader::read(&mut reader)
-        .map_err(|e| format!("Error reading GPT header: {}", e))?;
+    let gpt_head =
+        GPTHeader::read(&mut reader).map_err(|e| format!("Error reading GPT header: {}", e))?;
 
     let mut partitions = Vec::with_capacity(gpt_head.number_of_partition_entries as usize);
     for _ in 1..=gpt_head.number_of_partition_entries {

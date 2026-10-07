@@ -76,10 +76,7 @@ fn main() -> Result<(), String> {
             Mode::Pack => {
                 println!("🔍 DRY RUN MODE: No files will be modified");
                 println!("  Input directory: {}", args.input.display());
-                println!(
-                    "  Output file: {} (would be created)",
-                    output.display()
-                );
+                println!("  Output file: {} (would be created)", output.display());
                 println!("  Operations planned:");
                 println!("    1. Repack nested bootA/MinFS <file>.out/ trees into item files");
                 println!("    2. Refresh V* verify checksums if present");
@@ -88,10 +85,7 @@ fn main() -> Result<(), String> {
             Mode::FromDump => {
                 println!("🔍 DRY RUN MODE: No files will be modified");
                 println!("  Input directory: {}", args.input.display());
-                println!(
-                    "  Output file: {} (would be created)",
-                    output.display()
-                );
+                println!("  Output file: {} (would be created)", output.display());
                 println!("  Operations planned:");
                 println!("    1. Pack ROOTFS / UDISK / bootA (dump_tool behaviour)");
                 println!("    2. Build sunxi_mbr.fex + dlinfo.fex from this dump's GPT");
@@ -145,10 +139,7 @@ fn main() -> Result<(), String> {
                 );
                 println!("  Output file: {}", output.display());
             } else {
-                println!(
-                    "Building image from dump {:?} to {:?}",
-                    args.input, output
-                );
+                println!("Building image from dump {:?} to {:?}", args.input, output);
             }
             if !nested::is_dump_extract_dir(&args.input) {
                 return Err(format!(

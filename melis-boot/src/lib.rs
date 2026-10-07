@@ -10,7 +10,7 @@ use structs::{Toc1ItemInfo, Toc1MainInfo};
 pub mod fex_compiler;
 pub use fex_compiler::compile_sys_config;
 
-use lzma_rust::LZMAReader;
+use lzma_rust::{CountingWriter, LZMA2Options, LZMAReader, LZMAWriter};
 
 const TOC1_MAGIC: u32 = 0x8911_9800;
 const TOC1_CHECKSUM_STAMP: u32 = 0x5F0A_6C39;
@@ -43,7 +43,7 @@ fn calc_toc1_checksum(data: &[u8]) -> u32 {
     sum
 }
 
-fn read_toc1_items(data: &[u8]) -> Result<(Toc1MainInfo, Vec<Toc1ItemInfo>), String> {
+fn read_toc1_items(data: &[u8]) -> Result<(Toc1MainInfo, Vec<(Toc1ItemInfo, usize)>), String> {
     let mut cursor = Cursor::new(data);
     let main_info = Toc1MainInfo::read(&mut cursor)
         .map_err(|e| format!("Failed to parse TOC1 main info: {}", e))?;
@@ -53,14 +53,63 @@ fn read_toc1_items(data: &[u8]) -> Result<(Toc1MainInfo, Vec<Toc1ItemInfo>), Str
 
     let mut items = Vec::new();
     for _ in 0..main_info.num_items {
+        let info_offset = cursor.position() as usize;
         let item = Toc1ItemInfo::read(&mut cursor)
             .map_err(|e| format!("Failed to parse TOC1 item info: {}", e))?;
-        items.push(item);
+        items.push((item, info_offset));
     }
     Ok((main_info, items))
 }
 
-/// Repack a bootA image, replacing the melis-config payload and refreshing TOC1 checksum.
+fn item_range(item: &Toc1ItemInfo, valid_len: usize) -> Result<std::ops::Range<usize>, String> {
+    let start = item.offset as usize;
+    let end = start
+        .checked_add(item.length as usize)
+        .ok_or("TOC1 item range overflows")?;
+    if end > valid_len {
+        return Err("TOC1 item extends past the valid image length".into());
+    }
+    Ok(start..end)
+}
+
+fn compress_lzma(input: &[u8], original: &[u8]) -> Result<Vec<u8>, String> {
+    if original.len() < 13 {
+        return Err("Original melis-lzma payload has no LZMA header".into());
+    }
+    let props = original[0] as u32;
+    if props >= 225 {
+        return Err("Original melis-lzma payload has invalid LZMA properties".into());
+    }
+    let mut options = LZMA2Options::with_preset(6);
+    options.lc = props % 9;
+    options.lp = (props / 9) % 5;
+    options.pb = props / 45;
+    options.dict_size = u32::from_le_bytes(original[1..5].try_into().unwrap());
+
+    let input_size = if original[5..13].iter().all(|&byte| byte == 0xff) {
+        None
+    } else {
+        Some(input.len() as u64)
+    };
+    let mut compressed = Vec::new();
+    {
+        let mut writer =
+            LZMAWriter::new_use_header(CountingWriter::new(&mut compressed), &options, input_size)
+                .map_err(|e| format!("Failed to start LZMA encoder: {}", e))?;
+        writer
+            .write_all(input)
+            .map_err(|e| format!("Failed to compress epos.img: {}", e))?;
+        writer
+            .finish()
+            .map_err(|e| format!("Failed to finish LZMA payload: {}", e))?;
+    }
+    if decompress_lzma(&compressed)? != input {
+        return Err("Rebuilt melis-lzma payload failed the round-trip check".into());
+    }
+    Ok(compressed)
+}
+
+/// Repack bootA from its original TOC1 image and the extracted files beside melis-config.bin.
 pub fn pack(
     template_boot_path: impl AsRef<Path>,
     melis_config_path: impl AsRef<Path>,
@@ -82,13 +131,15 @@ pub fn pack(
     }
 
     let mut config_item = None;
-    for item in &items {
+    let mut lzma_item = None;
+    for (item, info_offset) in &items {
         let name = String::from_utf8_lossy(&item.name)
             .trim_end_matches('\0')
             .to_string();
         if name == "melis-config" {
             config_item = Some(item.clone());
-            break;
+        } else if name == "melis-lzma" {
+            lzma_item = Some((item.clone(), *info_offset));
         }
     }
     let config_item = config_item.ok_or("melis-config item not found in boot template")?;
@@ -101,15 +152,46 @@ pub fn pack(
         ));
     }
 
-    let start = config_item.offset as usize;
-    let end = start + config_item.length as usize;
-    if end > boot.len() {
-        return Err("melis-config slot out of bounds in boot template".to_string());
-    }
+    let config_range = item_range(&config_item, boot.len())?;
+    let start = config_range.start;
+    let end = config_range.end;
 
     boot[start..start + config.len()].copy_from_slice(&config);
     if config.len() < config_item.length as usize {
         boot[start + config.len()..end].fill(0);
+    }
+
+    let extracted_dir = melis_config_path
+        .as_ref()
+        .parent()
+        .ok_or("melis-config.bin has no parent directory")?;
+    let epos_path = extracted_dir.join("epos.img");
+    let mut kernel_size = None;
+    if epos_path.is_file() {
+        let epos =
+            std::fs::read(&epos_path).map_err(|e| format!("Failed to read epos.img: {}", e))?;
+        let baseline = std::fs::read(extracted_dir.join("melis-lzma.decompressed"))
+            .map_err(|e| format!("Failed to read melis-lzma.decompressed: {}", e))?;
+        if epos != baseline {
+            let (item, info_offset) =
+                lzma_item.ok_or("melis-lzma item not found in boot template")?;
+            let range = item_range(&item, valid_len)?;
+            let compressed = compress_lzma(&epos, &boot[range.clone()])?;
+            if compressed.len() > range.len() {
+                return Err(format!(
+                    "Rebuilt melis-lzma payload ({} bytes) exceeds original slot ({} bytes)",
+                    compressed.len(),
+                    range.len()
+                ));
+            }
+            boot[range.start..range.start + compressed.len()].copy_from_slice(&compressed);
+            boot[range.start + compressed.len()..range.end].fill(0);
+            // TOC1 item length follows its 64-byte name and 4-byte offset.
+            let length_offset = info_offset + 64 + 4;
+            boot[length_offset..length_offset + 4]
+                .copy_from_slice(&(compressed.len() as u32).to_le_bytes());
+            kernel_size = Some(compressed.len());
+        }
     }
 
     let checksum = calc_toc1_checksum(&boot[..valid_len]);
@@ -118,9 +200,13 @@ pub fn pack(
     std::fs::write(output_boot_path.as_ref(), &boot)
         .map_err(|e| format!("Failed to write repacked boot image: {}", e))?;
 
+    let kernel_status = kernel_size
+        .map(|size| format!("{} bytes", size))
+        .unwrap_or_else(|| "unchanged".to_string());
     println!(
-        "Repacked bootA: melis-config {} bytes, TOC1 checksum 0x{:08x}, valid_len 0x{:x}",
+        "Repacked bootA: melis-config {} bytes, melis-lzma {}, TOC1 checksum 0x{:08x}, valid_len 0x{:x}",
         config.len(),
+        kernel_status,
         checksum,
         valid_len
     );

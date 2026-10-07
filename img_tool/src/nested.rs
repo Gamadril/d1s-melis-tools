@@ -26,7 +26,11 @@ fn add_sum(data: &[u8]) -> u32 {
     sum
 }
 
-fn pad_nor_payload(mut data: Vec<u8>, max_size: Option<usize>, name: &str) -> Result<Vec<u8>, String> {
+fn pad_nor_payload(
+    mut data: Vec<u8>,
+    max_size: Option<usize>,
+    name: &str,
+) -> Result<Vec<u8>, String> {
     let padded = data.len().div_ceil(NOR_ERASE_SIZE) * NOR_ERASE_SIZE;
     if let Some(max) = max_size {
         if padded > max {
@@ -367,7 +371,9 @@ pub fn pack_dump_dir_as_image(
     output_img: &Path,
     verbose: bool,
 ) -> Result<(), String> {
+    let parts = gpt::read_partition_table(dump_dir.join("gpt.bin"))?;
     let packed = dump::pack_firmware(dump_dir, verbose)?;
+    let gpt_len = packed.gpt.len().min(GPT_HEADER_ITEM_SIZE);
 
     let stage = dump_dir.join(".img_pack_stage");
     if stage.exists() {
@@ -379,7 +385,6 @@ pub fn pack_dump_dir_as_image(
         fs::write(stage.join(name), data).map_err(|e| format!("Failed to write {}: {}", name, e))
     };
 
-    let parts = gpt::read_partition_table(dump_dir.join("gpt.bin"))?;
     let (mbr, dlinfo) = build_sunxi_mbr_and_dlinfo(&parts);
     let part_size = |name: &str| -> Option<usize> {
         parts
@@ -388,17 +393,20 @@ pub fn pack_dump_dir_as_image(
             .map(|p| p.size as usize)
     };
     let boota = pad_nor_payload(packed.boota, part_size("bootA"), "bootA")?;
-    let rootfs = pad_nor_payload(packed.rootfs, part_size("ROOTFS"), "ROOTFS")?;
+    let rootfs_size = part_size("ROOTFS").ok_or("ROOTFS partition missing from GPT")?;
+    let rootfs = pad_nor_payload(packed.rootfs, Some(rootfs_size), "ROOTFS")?;
     if verbose {
         println!(
-            "  IMAGEWTY payloads padded to 4K NOR erase: bootA {} bytes, ROOTFS {} bytes",
-            boota.len(),
+            "  IMAGEWTY ROOTFS payload padded to 4K NOR erase: {} bytes",
             rootfs.len()
+        );
+        println!(
+            "  IMAGEWTY bootA payload padded to 4K NOR erase: {} bytes",
+            boota.len()
         );
     }
 
     write("boot0_nor.fex", &packed.boot0)?;
-    let gpt_len = packed.gpt.len().min(GPT_HEADER_ITEM_SIZE);
     write("sunxi_gpt.fex", &packed.gpt[..gpt_len])?;
     write("sunxi_mbr_nor.fex", &mbr)?;
     write("dlinfo.fex", &dlinfo)?;
