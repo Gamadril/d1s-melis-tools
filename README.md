@@ -23,10 +23,10 @@ You can use the compiled executables directly...
 # Unpack full SPI NOR dump → boot0, GPT partitions, MinFS, UDISK, bootA (epos.img + sys_config.fex)
 ./dump_tool extract dump.bin out_dir
 
-# Repack after editing unpacked tree (ROOTFS, UDISK, …). Editing bootA's
-# sys_config.fex does NOT get picked up automatically - recompile it into
-# melis-config.bin first (see docs/INFO.md, "Extra: Manually Recompiling
-# sys_config.fex") if you changed it.
+# Repack after editing the extracted tree (ROOTFS, UDISK, bootA, …).
+# Edited bootA/epos.img is recompressed when it differs from
+# melis-lzma.decompressed. Recompile edited sys_config.fex into
+# melis-config.bin first (see docs/INFO.md).
 ./dump_tool pack out_dir dump.repacked.bin
 ```
 
@@ -63,11 +63,12 @@ gpt.bin.out/
   0_ppt.bin                 # GPT preamble (LBA 0–1): protective MBR + primary GPT header — not a data partition
   1_bootA.bin               # raw GPT partition image
   1_bootA.bin.out/          # TOC1 boot package
-    epos.img                # OpenSBI + Melis kernel
+    epos.img                # OpenSBI + Melis kernel; edited version is repacked
     melis-config.bin
     sys_config.fex          # decompiled hardware config
     pin_mappings.md         # created sumary just for info
     melis-lzma.bin
+    melis-lzma.decompressed # original decompressed kernel for comparison
   2_ROOTFS.bin              # raw GPT partition image
   2_ROOTFS.bin.out/         # MinFS (apps/, mod/, res/)
   3_UDISK.bin               # raw GPT partition image
@@ -79,7 +80,6 @@ gpt.bin.out/
 **`img_tool extract`** writes the flat IMAGEWTY items plus `image.cfg`. Any item that is TOC1 (`bootA`) or MinFS (`ROOTFS`) is also unpacked.
 
 **`img_tool from-dump`** takes a dump extract (`boot0.bin` + `gpt.bin`), splices edited ROOTFS/UDISK/bootA like `dump_tool pack`, then wraps them as 'IMAGEWTY' image.
-
 
 ## Boot Chain
 
