@@ -200,6 +200,30 @@ To flash a dump-derived image: `img_tool from-dump dump_out_dir` writes **`LTTF1
 
 `update.mod` erases SPI NOR with the raw item length and then the unused tail of the GPT partition. The spinor driver requires those lengths to be **4 KiB** aligned (`nor_erase: erase size 4k is not align to …`). Unaligned MinFS/TOC1 payloads make the last erase fail, the ROOTFS `add_sum` verify mismatches, and the burn retries forever while the UI timer keeps running. `img_tool pack` / `from-dump` pad bootA and ROOTFS items with `0xFF` to 4 KiB (and keep `V*.fex` in sync).
 
+## Android Auto - wired only mode
+
+There is something really annoying on that device if you want to use Android Auto only in wired mode.
+As soon as you connect your smartphone to the device using USB cable it automatically initiates bluetooth pairing without asking you.
+It's even worse - after you remove the usb cable the device switches immediately to wireless AA connection.
+There is nothing in the settings that would prevent this.
+
+As usual poking around in the firmware binaries I found the undocumented config value that must be set in the Config.ini.
+
+Short how-to:
+- insert a formatted Micro SD-Card into the device
+- enter `Factory Settings` by entering **113266** code
+- select `Configure Setting`
+- scroll to the bottom and click on `Export config file`
+- close the settings and open the SD-Card on your PC
+- Open the `Config.ini` file in a text editor and add `btPairMode=1` in the `[BT]` section
+- Save the file, create the folder `Update` (case-sensitive) on the SD-Card
+- move it into `Update` so that the path is `Update/Config.ini`
+- insert the SD-Card in the device again
+
+Some chinese text in yellow should confirm that the settings were imported and the device reboots automatically.
+Now Android Auto works only if the USB cable is connected.
+You might also need to unpair the device on your smartphone's bluetooth settings. 
+
 ---
 
 ## 5. Flash Dump: Creation and Recovery (HZ-B500-MB)
