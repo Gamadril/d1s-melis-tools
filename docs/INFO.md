@@ -315,6 +315,8 @@ The coprocessor's I2C slave address can be sniffed off the TWI2 lines with a log
 ## 7. Melis `.data` UI Format
 
 > Reverse-engineered from `init.axf`, with AI assistance. Offsets, types, and paint rules may be incomplete or wrong in places — treat this as a working model, not a spec.
+>
+> Notes marked **Verified (SK-8168)** were cross-checked on a different unit (EKIY 5", PCB SK-8168-MAIN-V6.2, 800×480, firmware `SK-8168V6.0-LVWTNFMTX-2405221856`): a reader/writer that follows them rebuilds all 75 `.data` files of that firmware byte-for-byte, and edited files were run in an emulator that boots the stock `init.axf` ([skyfortress/ekiy-melis-re](https://github.com/skyfortress/ekiy-melis-re)). Other firmware builds may differ.
 
 Every screen in the car UI — the home screen, the setup menus, CarPlay, the system bar — is one file under `2_ROOTFS/apps/Data/*.data`. `desktop.mod` only ever installs one thing, `apps/init.axf`; `init.axf` *is* the compositor, and it's what reads these `.data` files and draws them. This repo's `melis-data` crate parses the format, and `data_renderer` is a small standalone viewer — it does a 1:1 blit of each widget's bitmap and dumps the widget tree as text, but it isn't a full reimplementation of the runtime compositor.
 
@@ -335,6 +337,8 @@ The rest of this section walks through a `.data` file from the outside in: file 
 | `0x18` | 8 | Reserved |
 
 The header's own declared size (`0x10`) tells you where the next part — the section — starts. In practice that's always `0x20`, i.e. right after this header.
+
+**Verified (SK-8168):** the header size is `0x20` in 72 of 75 files and `0x18` in three (`Black`, `WallPaper`, `ScreenOff`); the 8 reserved bytes exist only in the `0x20` variant. The u32 at `0x14` is the **absolute file offset of the resource table**, and the section's `section_size` equals `table_offset - header_size` in all 75 files, so the table can be located without trying candidate positions.
 
 ### The section: one widget tree, described in two pieces
 
@@ -358,6 +362,8 @@ The `metadata` block is just a run of `u32` words. Two of those words are all th
 Screen size is normally 1024×600 — parsers fall back to that if it's missing.
 
 Each **descriptor** is a pair of `u32`s, and which one is the "kind" isn't fixed to a position: the parser looks at both words and treats whichever one equals `5` or `6` as the kind, and the other one (as long as it's a valid in-range file offset) as the payload. In every file that matters, kind `5` is the one to follow: it's the file offset of the root widget block for that screen. Kind `6` shows up in some files as a sibling entry alongside it, but nothing currently reads it — it isn't a second widget tree.
+
+**Verified (SK-8168):** the descriptor array holds `N + 3` entries, where `N` is metadata word 4. In all 75 files the first `N` are kind `5` (one per top-level view) and the last 3 are kind `6`. Every descriptor points at a block whose first u32 is its own size, and the blocks are contiguous up to the resource table.
 
 So: to render a `.data` file, you read the header, jump to the section, read its metadata to get the screen size and descriptor count, and then follow every kind-`5` descriptor to a widget block. That's where the actual UI lives.
 
@@ -395,11 +401,13 @@ After the metadata comes the **nested children list**, starting at `block_offset
 
 #### Type 0 — Text
 
-Plain text label, no children. Metadata carries the string itself (UTF-16LE, at `0xcc`–`0x194`), an RGB color as a packed `u32` at `0x1a8`, and a 2-bit horizontal alignment field at `0x1c0` (`0` = left, `1` = center, anything else = right).
+Plain text label, no children. Metadata carries the string itself (UTF-16LE, at `0xcc`–`0x194`), an RGB color as a packed `u32` at `0x1a8` (**verified (SK-8168):** byte order `0x00BBGGRR` — `0xbaf633` renders teal, `0x38c2f8` amber), and a 2-bit horizontal alignment field at `0x1c0` (`0` = left, `1` = center, anything else = right).
 
 #### Type 1 — Button
 
 Metadata holds four resource indices at `0xdc` — the button's bitmaps for its idle/pressed/etc. states, idle first — and a `string_id` (a lookup key into the language table, see below) at `0xf0`. It can carry up to two children: an image (type 4) if the flag at `0xfc` is set, and a text caption (type 0) if the flag at `0xf4` is set — checked and consumed in that order.
+
+**Verified (SK-8168):** the u32 at `0xf0` is the **event/command id the button sends when pressed**, not a string id. Changing it changes what the button does: e.g. the home screen's brightness button sends `0x227` (cycle 100 % → 43 % → off); patching it to `0x76` makes the same button open the backlight-slider popup instead. Other ids on this firmware: `0x11` home, `0x71` back, `0x6d` volume popup, `0x58` screen off (any touch wakes it), `0xa03`/`0xa04` CarPlay/Android Auto tiles. The ids `0x11`/`0x71` listed under "How screens combine at runtime" are these button events. A button's caption is its type-0 child, stored inline right after the button's metadata (child offset in the slot at `0x100`).
 
 #### Type 2 — Slider
 
@@ -432,6 +440,8 @@ This is the container type — screens themselves are type-5 blocks, and so are 
 Every non-text bitmap a widget references is an entry in a resource table that follows the section. Its exact position isn't fixed — the parser tries, in order, right after the section, at the header's declared `main_size`, and at `0x20 + main_size`, and uses whichever position parses as a plausible table. If none of them do, it falls back to scanning the whole file for PNG and BMP signatures instead.
 
 Where it exists, the table is a `u32` count followed by that many `{ file_offset, size }` pairs. Each entry it points at is `size + 0x18` bytes: an 0x18-byte per-resource header, then the pixel data.
+
+**Verified (SK-8168):** the per-resource header is `0x18` **or `0x20`** bytes (928 and 194 of 1122 resources); its first u32 is the header size, and the table's `size` excludes the header, so an entry is `size + header_size` bytes. The `0x20` variant appends two u32s (observed `1`, `0`). The u32 at `+0x14` is the absolute file offset of the payload (`entry offset + header size`) and must be updated if resources move. Entries are contiguous and the last one ends at end of file. Every resource in this firmware uses decode method `3`; recompressing the pixels with zlib level 9 reproduces the stored streams byte-for-byte, so edited images can be written back the same way.
 
 | Header offset | Field |
 | :--- | :--- |
