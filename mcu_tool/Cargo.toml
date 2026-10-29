@@ -1,0 +1,10 @@
+[package]
+name = "mcu_tool"
+version.workspace = true
+edition = "2021"
+description = "Decode and extract LTTMcu.bin updates for the Bluetrum AB5301B companion MCU"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.11"

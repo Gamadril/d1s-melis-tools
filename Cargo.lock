@@ -892,7 +892,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "data_renderer"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "eframe",
@@ -971,7 +971,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "dump"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "binrw",
  "gpt",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "dump_tool"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "dump",
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "gpt"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "binrw",
 ]
@@ -1764,7 +1764,7 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "binrw",
 ]
@@ -1785,12 +1785,12 @@ dependencies = [
 
 [[package]]
 name = "img_tool"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "dump",
  "gpt",
- "image 0.1.0",
+ "image 0.6.0",
  "melis-boot",
  "minfs",
 ]
@@ -2038,8 +2038,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcu_tool"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "sha2",
+]
+
+[[package]]
 name = "melis-boot"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "binrw",
  "lzma-rust",
@@ -2047,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "melis-data"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "flate2",
  "thiserror 2.0.21",
@@ -2079,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "minfs"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "binrw",
  "lzma-rust2",
@@ -3503,7 +3511,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "udisk"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "fatfs",
 ]
@@ -4448,7 +4456,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
 name = "xfel_spi_nor"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "rusb",

@@ -4,11 +4,17 @@ Custom tools to parse, extract, modify, and repack firmware for Allwinner F133/D
 
 **Primary designed for:** Aftermarket automotive infotainment devices with CarPlay and Android Auto support, and similar consumer electronics based on the F133/D1s SoC running Melis RTOS.
 
-**Note:** This toolkit should works with any F133/D1s Melis RTOS device - if not, create an issue and provide the dump/image. Device-specific reverse engineering notes and examples are documented separately.
+**Note:** This toolkit should works with any F133/D1s Melis RTOS device - if not, create an issue and provide the dump/image.
+Device-specific reverse engineering notes and examples are documented separately.
+
+The same tree also contains `mcu_tool` for `LTTMcu.bin` updates targeting the device's **Bluetrum AB5301B companion MCU**.
+Its format and decoding are separate from the Allwinner firmware.
+See [docs/AB5301B.md](docs/AB5301B.md) for extraction commands, options and output files.
 
 Get the latest Release Build for your platform to start.
 
-**Platform Notes:** Developed and tested primarily on Linux (Kubuntu). Windows and macOS support is included via helper scripts but less extensively tested.
+**Platform Notes:** Developed and tested primarily on Linux (Kubuntu).
+Windows and macOS support is included via helper scripts but less extensively tested.
 
 > [!NOTE]
 > If you land here because you just want to change the start image of your device - check `Quick Start: Change Startup Logo` in [docs/INFO.md](docs/INFO.md).
@@ -75,9 +81,12 @@ gpt.bin.out/
   3_UDISK.bin.out/          # FAT16 user disk
 ```
 
-`0_ppt.bin` is extracted for inspection only. `dump_tool pack` keeps the original `gpt.bin` header region and does not read `0_ppt.bin`. See [docs/INFO.md](docs/INFO.md) for layout details.
+`0_ppt.bin` is extracted for inspection only.
+`dump_tool pack` keeps the original `gpt.bin` header region and does not read `0_ppt.bin`.
+See [docs/INFO.md](docs/INFO.md) for layout details.
 
-**`img_tool extract`** writes the flat IMAGEWTY items plus `image.cfg`. Any item that is TOC1 (`bootA`) or MinFS (`ROOTFS`) is also unpacked.
+**`img_tool extract`** writes the flat IMAGEWTY items plus `image.cfg`.
+Any item that is TOC1 (`bootA`) or MinFS (`ROOTFS`) is also unpacked.
 
 **`img_tool from-dump`** takes a dump extract (`boot0.bin` + `gpt.bin`), splices edited ROOTFS/UDISK/bootA like `dump_tool pack`, then wraps them as 'IMAGEWTY' image.
 
@@ -101,7 +110,7 @@ Sub-crate roles:
 
 ## Release Bundle
 
-Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
+Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `mcu_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
 
 | Platform | Archive |
 |----------|---------|
@@ -113,8 +122,9 @@ Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `data_renderer
 
 See the following documentation files for detailed technical information:
 
-* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, SD/USB `.img` update, `.data` UI format, device-specific 
+* [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, SD/USB `.img` update, `.data` UI format, device-specific
 * [docs/PIN_MAPPING.md](docs/PIN_MAPPING.md) — F133 GPIO / mux reference
+* [docs/AB5301B.md](docs/AB5301B.md) — Companion MCU `LTTMcu.bin` extraction and decoding
 
 ## `.data` UI tools
 
