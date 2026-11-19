@@ -1,6 +1,6 @@
 [package]
 name = "data_renderer"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Cross-platform egui renderer for Melis declarative UI data"
 publish = false

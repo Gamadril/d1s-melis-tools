@@ -1,6 +1,6 @@
 [package]
 name = "img_tool"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "CLI to extract and repack Allwinner IMAGEWTY (.img) firmware update images"
 publish = false

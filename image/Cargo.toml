@@ -1,6 +1,6 @@
 [package]
 name = "image"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Allwinner eGON.BT0 and sunxi CHK / TOC image headers"
 publish = false
