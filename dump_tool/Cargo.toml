@@ -1,6 +1,6 @@
 [package]
 name = "dump_tool"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "CLI to extract and repack full Allwinner F133 Melis SPI NOR firmware dumps"
 publish = false

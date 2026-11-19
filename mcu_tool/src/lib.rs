@@ -22,6 +22,8 @@ pub struct DecodingParameters {
     pub boot_crc: u16,
     pub fingerprint: u32,
     pub raw_key: u32,
+    /// The key came from the caller (`--code-key`) instead of being recovered.
+    pub supplied_key: bool,
     pub resource_present: bool,
     pub resource_encoded: bool,
 }
@@ -54,7 +56,8 @@ pub struct Artifact {
 
 #[derive(Debug)]
 pub struct Extraction {
-    pub wrapper: Wrapper,
+    /// Absent for a raw flash dump, which has no update-file wrapper.
+    pub wrapper: Option<Wrapper>,
     pub input_sha256: String,
     pub parameters: Option<DecodingParameters>,
     pub artifacts: Vec<Artifact>,
@@ -168,11 +171,48 @@ pub fn decode_wrapper(input: &[u8]) -> Result<Wrapper> {
     })
 }
 
+/// True when `input` looks like a raw flash image read off the chip rather than
+/// an update file: its first 0x40 bytes decode to the CRWN flash header.
+pub fn is_flash_image(input: &[u8]) -> bool {
+    let Ok(header) = span(input, 0, 8) else {
+        return false;
+    };
+    let mut header = header.to_vec();
+    codec::xor_stream(&mut header, package::HEADER_SEED);
+    header == b"\x5a\x01\x00\xa5CRWN"
+}
+
+/// Decodes a raw flash dump (as produced by `mcu_dump`). `code_key` is the key
+/// the chip reports; without it the stock key is recovered from the bootstrap.
+pub fn extract_flash(input: &[u8], code_key: Option<u32>) -> Result<Extraction> {
+    let mut result = Extraction {
+        wrapper: None,
+        input_sha256: sha256(input),
+        parameters: None,
+        artifacts: Vec::new(),
+        validations: Vec::new(),
+    };
+    package::decode_flash(
+        input,
+        &package::FlashSource {
+            name: "input",
+            base: 0,
+            encoded: "input",
+        },
+        package::DEFAULT_FINGERPRINT,
+        code_key,
+        &mut result,
+    )?;
+    Ok(result)
+}
+
 pub fn extract(input: &[u8], options: &Options) -> Result<Extraction> {
     let wrapper = decode_wrapper(input)?;
     let input_sha256 = sha256(input);
+    let header_size = wrapper.header_size;
+    let package = wrapper.package.clone();
     let mut result = Extraction {
-        wrapper,
+        wrapper: Some(wrapper),
         input_sha256,
         parameters: None,
         artifacts: Vec::new(),
@@ -182,21 +222,8 @@ pub fn extract(input: &[u8], options: &Options) -> Result<Extraction> {
         ],
     };
     result.add("original.bin", input, "input", 0, None);
-    result.add(
-        "wrapper-header.bin",
-        &input[..result.wrapper.header_size],
-        "input",
-        0,
-        None,
-    );
-    let package = result.wrapper.package.clone();
-    result.add(
-        "package.bin",
-        &package,
-        "input (outer decoded)",
-        result.wrapper.header_size,
-        None,
-    );
+    result.add("wrapper-header.bin", &input[..header_size], "input", 0, None);
+    result.add("package.bin", &package, "input (outer decoded)", header_size, None);
     if !options.outer_only {
         package::decode(&package, &mut result)?;
     }
@@ -226,23 +253,36 @@ impl Extraction {
             "mcu_tool manifest v2\nAll offsets below are byte offsets in the named source.\n",
         );
         writeln!(out, "input_sha256 = {}", self.input_sha256).unwrap();
-        writeln!(
-            out,
-            "model = {:?}\ndescription = {:?}",
-            self.wrapper.model, self.wrapper.description
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "wrapper_header_size = {:#x}\nwrapper_seed = {:#04x}\nouter_checksum = {:#04x}",
-            self.wrapper.header_size, self.wrapper.seed, self.wrapper.checksum
-        )
-        .unwrap();
+        match &self.wrapper {
+            Some(wrapper) => {
+                writeln!(
+                    out,
+                    "input_kind = update file\nmodel = {:?}\ndescription = {:?}",
+                    wrapper.model, wrapper.description
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "wrapper_header_size = {:#x}\nwrapper_seed = {:#04x}\nouter_checksum = {:#04x}",
+                    wrapper.header_size, wrapper.seed, wrapper.checksum
+                )
+                .unwrap();
+            }
+            None => out.push_str("input_kind = raw flash dump\n"),
+        }
         if let Some(parameters) = self.parameters {
-            out.push_str(
-                "loader_seed = 0x44505558 (XOR zero-based page index, restart per image)\n",
-            );
-            writeln!(out, "mode = full\nparameter_source = automatic derivation from validated bootstrap and image fields\nheader_seed = {:#010x}\ndirectory_seed = {:#010x}\nboot_seed = {:#010x}\nboot_crc16 = {:#06x}\ntarget_fingerprint = {:#010x}\nrecovered_key = {:#010x}\ncode_seed = {:#010x}", parameters.header, parameters.directory, parameters.boot, parameters.boot_crc, parameters.fingerprint, parameters.raw_key, parameters.code).unwrap();
+            // The loaders this seed decodes exist only in an update file.
+            if self.wrapper.is_some() {
+                out.push_str(
+                    "loader_seed = 0x44505558 (XOR zero-based page index, restart per image)\n",
+                );
+            }
+            let (source, key_field) = if parameters.supplied_key {
+                ("code key supplied by the caller, validated against every XCOD page CRC16", "supplied_key")
+            } else {
+                ("automatic derivation from validated bootstrap and image fields", "recovered_key")
+            };
+            writeln!(out, "mode = full\nparameter_source = {source}\nheader_seed = {:#010x}\ndirectory_seed = {:#010x}\nboot_seed = {:#010x}\nboot_crc16 = {:#06x}\ntarget_fingerprint = {:#010x}\n{key_field} = {:#010x}\ncode_seed = {:#010x}", parameters.header, parameters.directory, parameters.boot, parameters.boot_crc, parameters.fingerprint, parameters.raw_key, parameters.code).unwrap();
             let resource_transform = if !parameters.resource_present {
                 "absent (directory presence flag is zero)"
             } else if parameters.resource_encoded {
@@ -251,7 +291,11 @@ impl Extraction {
                 "plaintext"
             };
             writeln!(out, "resource_transform = {resource_transform}").unwrap();
-            writeln!(out, "LIMIT: supports the identified AB5301B bootstrap; unknown INFO/directory fields and raw sections are preserved.\nLIMIT: runtime bases describe the reference mapping; updater and RAM share a base in separate execution phases.\nLIMIT: decoded files are raw images, not a contiguous plaintext flash image; device compatibility is unverified.").unwrap();
+            writeln!(out, "LIMIT: supports the identified AB5301B bootstrap; unknown INFO/directory fields and raw sections are preserved.").unwrap();
+            if self.wrapper.is_some() {
+                writeln!(out, "LIMIT: runtime bases describe the reference mapping; updater and RAM share a base in separate execution phases.").unwrap();
+            }
+            writeln!(out, "LIMIT: decoded files are raw images, not a contiguous plaintext flash image; device compatibility is unverified.").unwrap();
         } else {
             writeln!(out, "mode = outer-only\nLIMIT: inner package has not been parsed, decoded or CRC-validated.").unwrap();
         }

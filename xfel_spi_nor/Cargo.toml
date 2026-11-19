@@ -1,6 +1,6 @@
 [package]
 name = "xfel_spi_nor"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "D1/F133 SPI NOR over USB FEL (spinor read/write from xfel, D1s only)"
 license = "MIT"

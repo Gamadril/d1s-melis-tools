@@ -1,6 +1,6 @@
 [package]
 name = "udisk"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "UDISK FAT16 user partition pack and unpack"
 publish = false

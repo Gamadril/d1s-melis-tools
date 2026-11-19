@@ -8,9 +8,9 @@ use crate::{
 
 const PAGE: usize = 512;
 const LOADER_SEED: u32 = 0x44505558;
-const HEADER_SEED: u32 = 0x474d564c;
+pub(super) const HEADER_SEED: u32 = 0x474d564c;
 const CACHE_CONSTANT: u32 = 0x50504158;
-const DEFAULT_FINGERPRINT: u32 = 0x09d4c0cc;
+pub(super) const DEFAULT_FINGERPRINT: u32 = 0x09d4c0cc;
 // Identify the bootstrap whose fingerprint/default/flag behavior was traced.
 // This identifies executable semantics, not a complete firmware input/profile.
 const BOOTSTRAP_SHA256: &str = "d0ee4bc492fd580fc7a9b3bbfddf2cd1d32b02c1d99a04686ce66e3932495df0";
@@ -199,9 +199,16 @@ fn decode_code(
     flash: &[u8],
     fingerprint: u32,
     boot_crc: u16,
+    code_key: Option<u32>,
 ) -> Result<(u32, u32, Vec<u8>)> {
+    // A dump read off the chip comes with its code key; an update file does not,
+    // so there the key is recovered from the target fingerprint.
+    let candidates = match code_key {
+        Some(key) => vec![key],
+        None => recover_keys(fingerprint)?.to_vec(),
+    };
     let mut selected = None;
-    for key in recover_keys(fingerprint)? {
+    for key in candidates {
         let base = key ^ repeat16(boot_crc) ^ CACHE_CONSTANT;
         if let Ok(decoded) = bank.decode(flash, Some(base), "xcod") {
             if selected.is_some() {
@@ -212,7 +219,13 @@ fn decode_code(
             selected = Some((key, base, decoded));
         }
     }
-    selected.ok_or_else(|| "no target-key candidate passed every XCOD page CRC".into())
+    selected.ok_or_else(|| {
+        if code_key.is_some() {
+            "the given code key did not decode XCOD: check --code-key".into()
+        } else {
+            String::from("no target-key candidate passed every XCOD page CRC")
+        }
+    })
 }
 
 pub(super) fn decode(package: &[u8], result: &mut Extraction) -> Result<()> {
@@ -316,149 +329,22 @@ pub(super) fn decode(package: &[u8], result: &mut Extraction) -> Result<()> {
             .push(format!("PASS {path} whole-region CRC16 = {expected:#06x}"));
     }
 
-    let mut header = span(flash, 0, 0x40)?.to_vec();
-    xor_stream(&mut header, HEADER_SEED);
-    if &header[..8] != b"\x5a\x01\x00\xa5CRWN" {
-        return Err("decoded flash header signature mismatch".into());
-    }
-    check_crc(
-        "decoded flash header",
-        &header[..62],
-        0xffff,
-        u16le(&header, 62)?,
-    )?;
-    result
-        .validations
-        .push("PASS decoded flash header signature and CRC16".into());
-    result.add(
-        "flash-header.bin",
-        &header,
-        "raw/main-flash.encoded.bin",
-        0,
-        None,
-    );
-    let boot = decode_boot(flash, &header)?;
-    result.validations.push(format!(
-        "PASS boot loader CRC16 = {:#06x} and identified bootstrap SHA256",
-        boot.crc
-    ));
-    result.add(
-        "boot.bin",
-        &boot.decoded,
-        "package.bin",
-        data[2] + boot.range.start,
-        Some(boot.runtime_base),
-    );
-    let (directory, directory_seed) = decode_directory(flash)?;
-    result.validations.push(format!(
-        "PASS flash directory CRC16 = {:#06x}",
-        u16le(flash, 0x80)?
-    ));
     let fingerprint = if stored_fingerprint == 0 {
         DEFAULT_FINGERPRINT
     } else {
         stored_fingerprint
     };
-    let code = read_bank(
+    decode_flash(
         flash,
-        u32le(&directory, 0)? as usize,
-        u32le(&directory, 4)? as usize,
-        b"\xd8\xc3\xcf\xc4",
-        "xcod",
-    )?;
-    let resource_present = directory[0x1e] != 0;
-    let resource_encoded = directory[0x1f] != 0;
-    let resource = if resource_present {
-        Some(read_bank(
-            flash,
-            u32le(&directory, 16)? as usize,
-            u32le(&directory, 20)? as usize,
-            b"\xd8\xd2\xc5\xd3",
-            "xres",
-        )?)
-    } else {
-        None
-    };
-    let mut regions_in_flash = vec![
-        ("flash header, directory and CRC".into(), 0..0x82),
-        ("boot loader".into(), boot.range.clone()),
-        ("xcod".into(), code.range.clone()),
-    ];
-    if let Some(bank) = &resource {
-        regions_in_flash.push(("xres".into(), bank.range.clone()));
-    }
-    disjoint(&regions_in_flash)?;
-    let (raw_key, code_seed, code_bytes) = decode_code(&code, flash, fingerprint, boot.crc)?;
-    result.validations.push(
-        "PASS target fingerprint inversion: exactly one candidate passed every XCOD page CRC"
-            .into(),
-    );
-    result.parameters = Some(DecodingParameters {
-        header: HEADER_SEED,
-        directory: directory_seed,
-        code: code_seed,
-        boot: boot.seed,
-        boot_crc: boot.crc,
+        &FlashSource {
+            name: "package.bin",
+            base: data[2],
+            encoded: "raw/main-flash.encoded.bin",
+        },
         fingerprint,
-        raw_key,
-        resource_present,
-        resource_encoded,
-    });
-    let resource_bytes = resource
-        .as_ref()
-        .map(|bank| bank.decode(flash, resource_encoded.then_some(0), "xres"))
-        .transpose()?;
-    let mut decoded_banks = vec![("xcod", &code, code_bytes, 0x10000000)];
-    if let Some(bank) = &resource {
-        decoded_banks.push(("xres", bank, resource_bytes.unwrap(), 0x11000000));
-    } else {
-        result
-            .validations
-            .push("SKIP XRES: directory marks resource bank absent; raw flash is preserved".into());
-    }
-    let last_bank_end = decoded_banks
-        .iter()
-        .map(|(_, bank, _, _)| bank.range.end)
-        .max()
-        .unwrap();
-    for (name, bank, bytes, base) in decoded_banks {
-        result.add(
-            &format!("{name}.bin"),
-            &bytes,
-            "package.bin",
-            data[2] + bank.payload.start,
-            Some(base),
-        );
-        result.add(
-            &format!("raw/{name}-prefix.bin"),
-            &flash[bank.prefix.clone()],
-            "package.bin",
-            data[2] + bank.prefix.start,
-            None,
-        );
-        result.validations.push(format!(
-            "PASS {name} prefix CRC16 and plaintext page CRC16: {0}/{0} pages",
-            bank.page_count
-        ));
-    }
-    result.validations.push(
-        "PASS flash directory bounds, bank lengths and non-overlap with bootstrap/header/CRC"
-            .into(),
-    );
-    result.add(
-        "flash-directory.bin",
-        &directory,
-        "raw/main-flash.encoded.bin",
-        0x40,
         None,
-    );
-    result.add(
-        "raw/flash-tail.bin",
-        &flash[last_bank_end..],
-        "package.bin",
-        data[2] + last_bank_end,
-        None,
-    );
+        result,
+    )?;
     result.add(
         "raw/package-header.bin",
         &package[..0x200],
@@ -497,6 +383,158 @@ pub(super) fn decode(package: &[u8], result: &mut Extraction) -> Result<()> {
     Ok(())
 }
 
+/// Where a flash image's artifacts came from: the enclosing file and the offset
+/// of the image inside it, plus the name to cite for image-relative fields.
+pub(super) struct FlashSource<'a> {
+    pub name: &'a str,
+    pub base: usize,
+    pub encoded: &'a str,
+}
+
+/// Decodes the flash image itself: header, boot loader, directory and the XCOD
+/// and XRES banks. The same image sits inside an update file and on the chip,
+/// so this runs for both `extract` and a raw dump read with `mcu_dump`.
+pub(super) fn decode_flash(
+    flash: &[u8],
+    source: &FlashSource,
+    fingerprint: u32,
+    code_key: Option<u32>,
+    result: &mut Extraction,
+) -> Result<()> {
+    let mut header = span(flash, 0, 0x40)?.to_vec();
+    xor_stream(&mut header, HEADER_SEED);
+    if &header[..8] != b"\x5a\x01\x00\xa5CRWN" {
+        return Err("decoded flash header signature mismatch".into());
+    }
+    check_crc(
+        "decoded flash header",
+        &header[..62],
+        0xffff,
+        u16le(&header, 62)?,
+    )?;
+    result
+        .validations
+        .push("PASS decoded flash header signature and CRC16".into());
+    result.add("flash-header.bin", &header, source.encoded, 0, None);
+    let boot = decode_boot(flash, &header)?;
+    result.validations.push(format!(
+        "PASS boot loader CRC16 = {:#06x} and identified bootstrap SHA256",
+        boot.crc
+    ));
+    result.add(
+        "boot.bin",
+        &boot.decoded,
+        source.name,
+        source.base + boot.range.start,
+        Some(boot.runtime_base),
+    );
+    let (directory, directory_seed) = decode_directory(flash)?;
+    result.validations.push(format!(
+        "PASS flash directory CRC16 = {:#06x}",
+        u16le(flash, 0x80)?
+    ));
+    let code = read_bank(
+        flash,
+        u32le(&directory, 0)? as usize,
+        u32le(&directory, 4)? as usize,
+        b"\xd8\xc3\xcf\xc4",
+        "xcod",
+    )?;
+    let resource_present = directory[0x1e] != 0;
+    let resource_encoded = directory[0x1f] != 0;
+    let resource = if resource_present {
+        Some(read_bank(
+            flash,
+            u32le(&directory, 16)? as usize,
+            u32le(&directory, 20)? as usize,
+            b"\xd8\xd2\xc5\xd3",
+            "xres",
+        )?)
+    } else {
+        None
+    };
+    let mut regions_in_flash = vec![
+        ("flash header, directory and CRC".into(), 0..0x82),
+        ("boot loader".into(), boot.range.clone()),
+        ("xcod".into(), code.range.clone()),
+    ];
+    if let Some(bank) = &resource {
+        regions_in_flash.push(("xres".into(), bank.range.clone()));
+    }
+    disjoint(&regions_in_flash)?;
+    let (raw_key, code_seed, code_bytes) =
+        decode_code(&code, flash, fingerprint, boot.crc, code_key)?;
+    result.validations.push(if code_key.is_some() {
+        "PASS XCOD page CRC16 with the supplied code key".into()
+    } else {
+        String::from(
+            "PASS target fingerprint inversion: exactly one candidate passed every XCOD page CRC",
+        )
+    });
+    result.parameters = Some(DecodingParameters {
+        header: HEADER_SEED,
+        directory: directory_seed,
+        code: code_seed,
+        boot: boot.seed,
+        boot_crc: boot.crc,
+        fingerprint,
+        raw_key,
+        supplied_key: code_key.is_some(),
+        resource_present,
+        resource_encoded,
+    });
+    let resource_bytes = resource
+        .as_ref()
+        .map(|bank| bank.decode(flash, resource_encoded.then_some(0), "xres"))
+        .transpose()?;
+    let mut decoded_banks = vec![("xcod", &code, code_bytes, 0x10000000)];
+    if let Some(bank) = &resource {
+        decoded_banks.push(("xres", bank, resource_bytes.unwrap(), 0x11000000));
+    } else {
+        result
+            .validations
+            .push("SKIP XRES: directory marks resource bank absent; raw flash is preserved".into());
+    }
+    let last_bank_end = decoded_banks
+        .iter()
+        .map(|(_, bank, _, _)| bank.range.end)
+        .max()
+        .unwrap();
+    for (name, bank, bytes, base) in decoded_banks {
+        result.add(
+            &format!("{name}.bin"),
+            &bytes,
+            source.name,
+            source.base + bank.payload.start,
+            Some(base),
+        );
+        result.add(
+            &format!("raw/{name}-prefix.bin"),
+            &flash[bank.prefix.clone()],
+            source.name,
+            source.base + bank.prefix.start,
+            None,
+        );
+        result.validations.push(format!(
+            "PASS {name} prefix CRC16 and plaintext page CRC16: {0}/{0} pages",
+            bank.page_count
+        ));
+    }
+    result.validations.push(
+        "PASS flash directory bounds, bank lengths and non-overlap with bootstrap/header/CRC"
+            .into(),
+    );
+    result.add("flash-directory.bin", &directory, source.encoded, 0x40, None);
+    result.add(
+        "raw/flash-tail.bin",
+        &flash[last_bank_end..],
+        source.name,
+        source.base + last_bank_end,
+        None,
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,12 +567,12 @@ mod tests {
     fn candidate_selection_requires_every_page_to_pass() {
         let mut flash = fixture(Some(0x1665b6e5));
         let bank = bank(&flash).unwrap();
-        let (key, base, bytes) = decode_code(&bank, &flash, DEFAULT_FINGERPRINT, 0xf3a4).unwrap();
+        let (key, base, bytes) = decode_code(&bank, &flash, DEFAULT_FINGERPRINT, 0xf3a4, None).unwrap();
         assert_eq!((key, base), (0xb5910419, 0x1665b6e5));
         assert_eq!(bytes[..PAGE], [0x31; PAGE]);
         assert_eq!(bytes[PAGE..], [0x32; PAGE]);
         flash[2 * PAGE] ^= 1;
-        assert!(decode_code(&bank, &flash, DEFAULT_FINGERPRINT, 0xf3a4)
+        assert!(decode_code(&bank, &flash, DEFAULT_FINGERPRINT, 0xf3a4, None)
             .unwrap_err()
             .contains("no target-key candidate"));
     }
