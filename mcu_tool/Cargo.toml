@@ -2,7 +2,7 @@
 name = "mcu_tool"
 version.workspace = true
 edition = "2021"
-description = "Decode and extract LTTMcu.bin updates for the Bluetrum AB5301B companion MCU"
+description = "Decode and extract LTTMcu.bin updates and raw flash dumps of the Bluetrum AB5301B companion MCU"
 publish = false
 
 [dependencies]

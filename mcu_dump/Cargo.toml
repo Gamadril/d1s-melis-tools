@@ -1,0 +1,13 @@
+[package]
+name = "mcu_dump"
+version.workspace = true
+edition = "2021"
+description = "Dump the internal flash of a Bluetrum AB5301B (BLUECRWN) MCU over its UART bootloader"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+# crc16 (CRC-16/CCITT-FALSE) is already the Bluetrum primitive used by mcu_tool.
+mcu_tool = { path = "../mcu_tool" }
+# default features pull in libudev, which is only needed to enumerate ports.
+serialport = { version = "4", default-features = false }

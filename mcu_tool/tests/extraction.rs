@@ -1,5 +1,5 @@
 use mcu_tool::codec::{crc16, xor_stream};
-use mcu_tool::{decode_wrapper, extract, sha256, Options};
+use mcu_tool::{decode_wrapper, extract, extract_flash, is_flash_image, sha256, Options};
 
 fn put32(bytes: &mut [u8], offset: usize, value: usize) {
     bytes[offset..offset + 4].copy_from_slice(&(value as u32).to_le_bytes());
@@ -99,7 +99,7 @@ fn unknown_bootstrap_is_rejected_but_outer_only_preserves_it() {
     let package = package_fixture();
     assert!(error(&package).contains("unsupported boot-loader variant"));
     let result = extract(&wrap(&package), &Options { outer_only: true }).unwrap();
-    assert_eq!(result.wrapper.package, package);
+    assert_eq!(result.wrapper.as_ref().unwrap().package, package);
     assert_eq!(result.artifacts.len(), 3);
     assert!(result.parameters.is_none());
     assert!(result
@@ -211,7 +211,7 @@ fn check_vectors(
     assert_eq!(parameters.code, 0x1665b6e5);
     assert_eq!(parameters.raw_key, 0xb5910419);
     assert_eq!(parameters.fingerprint, 0x09d4c0cc);
-    assert_eq!(result.wrapper.model, "Ltt5301B");
+    assert_eq!(result.wrapper.as_ref().unwrap().model, "Ltt5301B");
     for &(path, length, hash) in vectors {
         let file = result
             .artifacts
@@ -423,7 +423,7 @@ fn image_fields_control_derivation_and_resource_loading() {
             .bytes
             .clone()
     };
-    let package = original.wrapper.package.clone();
+    let package = original.wrapper.as_ref().unwrap().package.clone();
     let flash = u32::from_le_bytes(package[0x48..0x4c].try_into().unwrap()) as usize;
 
     // A nonzero INFO fingerprint takes precedence over the bootstrap's zero default.
@@ -476,4 +476,56 @@ fn image_fields_control_derivation_and_resource_loading() {
     assert!(!result.parameters.unwrap().resource_present);
     assert!(!result.artifacts.iter().any(|file| file.path == "xres.bin"));
     assert!(result.manifest().contains("SKIP XRES"));
+}
+
+#[test]
+fn flash_dumps_are_told_apart_from_update_files() {
+    // A raw dump starts with the flash header, scrambled with the fixed seed.
+    let mut header = b"\x5a\x01\x00\xa5CRWN".to_vec();
+    xor_stream(&mut header, 0x474d564c);
+    assert!(is_flash_image(&header));
+    header[0] ^= 1;
+    assert!(!is_flash_image(&header));
+    assert!(!is_flash_image(&wrap(&package_fixture())));
+    assert!(!is_flash_image(&[]));
+}
+
+/// A flash image read off the chip with `mcu_dump` decodes to the same banks an
+/// update file carries. Hashes cross-checked against bluetrum-tools `fwunpack.py`.
+#[test]
+#[ignore = "requires a flash dump from a device; set LTTMCU_FLASH_DUMP"]
+fn flash_dump_decodes_without_a_code_key() {
+    let dump = sample("LTTMCU_FLASH_DUMP");
+    for code_key in [None, Some(0xb591_0419)] {
+        let result = extract_flash(&dump, code_key).unwrap();
+        assert!(result.wrapper.is_none());
+        let parameters = result.parameters.unwrap();
+        assert_eq!(parameters.raw_key, 0xb591_0419);
+        assert_eq!(parameters.code, 0x1665_b6e5);
+        let artifact = |name: &str| {
+            let file = result
+                .artifacts
+                .iter()
+                .find(|file| file.path == name)
+                .unwrap();
+            sha256(&file.bytes)
+        };
+        assert_eq!(
+            artifact("xcod.bin"),
+            "ae01876d07438953903e69cbbb081a8479f29549dc5c34d11ec761e3a32b502f"
+        );
+        assert_eq!(
+            artifact("xres.bin"),
+            "cfdce59f287197fcbf980596ccfcd21545a820ce270a8a140d573c1e0346ea73"
+        );
+        assert_eq!(
+            artifact("boot.bin"),
+            "d0ee4bc492fd580fc7a9b3bbfddf2cd1d32b02c1d99a04686ce66e3932495df0"
+        );
+        assert!(result.manifest().contains("input_kind = raw flash dump"));
+    }
+    // A wrong key must not quietly fall back to the recovered one.
+    assert!(extract_flash(&dump, Some(0xdead_beef))
+        .unwrap_err()
+        .contains("--code-key"));
 }

@@ -7,9 +7,12 @@ Custom tools to parse, extract, modify, and repack firmware for Allwinner F133/D
 **Note:** This toolkit should works with any F133/D1s Melis RTOS device - if not, create an issue and provide the dump/image.
 Device-specific reverse engineering notes and examples are documented separately.
 
-The same tree also contains `mcu_tool` for `LTTMcu.bin` updates targeting the device's **Bluetrum AB5301B companion MCU**.
-Its format and decoding are separate from the Allwinner firmware.
-See [docs/AB5301B.md](docs/AB5301B.md) for extraction commands, options and output files.
+The same tree also contains two tools for the device's **Bluetrum AB5301B companion MCU**: `mcu_tool` decodes `LTTMcu.bin` updates and raw flash dumps, and `mcu_dump` reads the MCU's internal flash over UART when no update file exists.
+Their format and decoding are separate from the Allwinner firmware.
+See [docs/AB5301B.md](docs/AB5301B.md) for commands, options and output files, and [docs/CRWN_DUMP_PROTOCOL.md](docs/CRWN_DUMP_PROTOCOL.md) for the UART bootloader protocol.
+
+`mcu_dump` is based on the kagaimiq's excellent [bluetrum-tools](https://github.com/kagaimiq/bluetrum-tools) — and was the starting point for this tool.
+The CRWN (AB53xx) part needed its own RAM stub, since the AB560x blob does not run on it.
 
 Get the latest Release Build for your platform to start.
 
@@ -110,7 +113,7 @@ Sub-crate roles:
 
 ## Release Bundle
 
-Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `mcu_tool`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
+Each archive's `bin/` directory contains `dump_tool`, `img_tool`, `mcu_tool`, `mcu_dump`, `data_renderer`, `compile_fex`, and `xfel_spi_nor`.
 
 | Platform | Archive |
 |----------|---------|
@@ -124,7 +127,8 @@ See the following documentation files for detailed technical information:
 
 * [docs/INFO.md](docs/INFO.md) — Boot process, partition layout, reverse engineering, SD/USB `.img` update, `.data` UI format, device-specific
 * [docs/PIN_MAPPING.md](docs/PIN_MAPPING.md) — F133 GPIO / mux reference
-* [docs/AB5301B.md](docs/AB5301B.md) — Companion MCU `LTTMcu.bin` extraction and decoding
+* [docs/AB5301B.md](docs/AB5301B.md) — Companion MCU: `LTTMcu.bin` extraction, decoding, and dumping its internal flash
+* [docs/CRWN_DUMP_PROTOCOL.md](docs/CRWN_DUMP_PROTOCOL.md) — AB5301B UART bootloader protocol (what `mcu_dump` implements)
 
 ## `.data` UI tools
 

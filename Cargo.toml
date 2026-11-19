@@ -3,6 +3,7 @@ members = [
     "dump_tool",
     "img_tool",
     "mcu_tool",
+    "mcu_dump",
     "minfs",
     "image",
     "gpt",
@@ -17,7 +18,7 @@ exclude = ["sd_fel_switcher"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 
 [workspace.dependencies]
 binrw = "0.15"
